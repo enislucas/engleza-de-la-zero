@@ -195,6 +195,10 @@ function mountType(el, ex, ctx, listenMode) {
   ta.placeholder = 'Scrie aici în engleză...';
   ta.autocapitalize = 'off'; ta.autocomplete = 'off'; ta.spellcheck = false;
   ta.addEventListener('input', () => ctx.refresh());
+  // tastatura de pe telefon acoperă bara VERIFICĂ → aducem câmpul la mijlocul ecranului
+  ta.addEventListener('focus', () => {
+    setTimeout(() => { try { ta.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} }, 350);
+  });
   el.appendChild(ta);
   setTimeout(() => { try { ta.focus(); } catch (_) {} }, 400);
   return {
@@ -242,12 +246,18 @@ function mountSpeak(el, ex, ctx) {
       if (r.ok && r.text) {
         heard.textContent = '„' + r.text + '”';
         const chk = checkSpoken(r.alts || [r.text], s.en);
-        result = { ok: chk.ok, correctText: s.en, userText: r.text, wordIds: s.words || [], noHeart: true, isSpeak: true };
-        if (chk.ok) { sfx.correct(); ctx.autoDone(result); }
-        else {
+        if (chk.ok) {
+          result = { ok: true, correctText: s.en, userText: r.text, wordIds: s.words || [], noHeart: true, isSpeak: true };
+          sfx.correct();
+          ctx.autoDone(result);
+        } else {
           attempts++;
           heard.textContent = '„' + r.text + '” — mai încearcă o dată, rar și clar.';
-          if (attempts >= 2) ctx.allowSkipAsOk('Nu-i nimic — pronunția vine cu timpul.');
+          // abia după 2 încercări ratate permitem "verifică" (fără pierdere de viață — e vorbire)
+          if (attempts >= 2) {
+            result = { ok: false, correctText: s.en, userText: r.text, wordIds: s.words || [], noHeart: true, isSpeak: true };
+            ctx.allowSkipAsOk('Nu-i nimic — pronunția vine cu timpul.');
+          }
           ctx.refresh();
         }
       } else {
@@ -319,7 +329,11 @@ function mountMatch(el, ex, ctx) {
       errors++;
       const a = selBtn, c = b;
       a.classList.add('wrong'); c.classList.add('wrong'); sfx.wrong();
-      setTimeout(() => { a.classList.remove('wrong', 'sel'); c.classList.remove('wrong'); }, 600);
+      setTimeout(() => {
+        a.classList.remove('wrong');
+        if (selBtn !== a) a.classList.remove('sel'); // nu strica selecția refăcută între timp
+        c.classList.remove('wrong');
+      }, 600);
       selBtn = null;
     }
   });

@@ -2,7 +2,7 @@
 // calibrați ca un cursant activ (2-3 lecții/zi) să termine în top 3, dar nu automat pe locul 1.
 // Fără rușine la retrogradare: promovarea se sărbătorește, coborârea se anunță discret.
 
-import { state, save, todayStr } from './state.js';
+import { state, save, todayStr, weekStartDate } from './state.js';
 import { hashStr, seededRand, addGems } from './gamify.js';
 
 export const TIERS = [
@@ -20,16 +20,13 @@ const BOT_NAMES = [
   ['Petre', '👴'], ['Larisa', '🙍‍♀️'], ['Nicu', '🙎‍♂️'], ['Camelia', '💁‍♀️'], ['Sorin', '🤵'],
 ];
 
-// Luni ca început de săptămână.
+// Luni ca început de săptămână (calcul pe ora locală, nu UTC).
 export function weekId(d = new Date()) {
-  const dt = new Date(d);
-  const day = (dt.getDay() + 6) % 7; // 0 = luni
-  dt.setDate(dt.getDate() - day);
-  return todayStr(dt);
+  return todayStr(weekStartDate(d));
 }
 
 function weekProgress(d = new Date()) {
-  const start = new Date(weekId(d));
+  const start = weekStartDate(d);
   const frac = (d - start) / (7 * 86400000);
   return Math.min(1, Math.max(0.02, frac));
 }
@@ -122,7 +119,7 @@ export function standings(p = state.profile) {
 }
 
 export function daysLeftInWeek() {
-  const start = new Date(weekId());
+  const start = weekStartDate();
   const end = new Date(start); end.setDate(end.getDate() + 7);
   return Math.max(0, Math.ceil((end - new Date()) / 86400000));
 }

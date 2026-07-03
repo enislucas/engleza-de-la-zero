@@ -91,27 +91,58 @@ export function save(immediate = false) {
   saveTimer = setTimeout(doSave, 400);
 }
 
+function parseData(raw) {
+  if (!raw) return null;
+  try {
+    const d = JSON.parse(raw);
+    if (d && Array.isArray(d.profiles)) return d;
+  } catch (_) {}
+  return null;
+}
+
 export async function load() {
   let raw = null;
   try { raw = localStorage.getItem(LS_KEY); } catch (_) {}
-  if (!raw) raw = await idbGet(); // recuperare dacă localStorage a fost șters
-  if (raw) {
-    try {
-      const d = JSON.parse(raw);
-      if (d && Array.isArray(d.profiles)) {
-        state.data = d;
-        state.profile = d.profiles.find(p => p.id === d.active) || d.profiles[0] || null;
-      }
-    } catch (_) {}
+  let d = parseData(raw);
+  if (!d) {
+    // recuperare din oglinda IndexedDB dacă localStorage lipsește SAU e corupt
+    d = parseData(await idbGet());
+  }
+  if (d) {
+    state.data = d;
+    state.profile = d.profiles.find(p => p.id === d.active) || d.profiles[0] || null;
   }
   if (!state.data) {
     state.data = { v: 1, profiles: [], active: '', installed: todayStr() };
   }
+  // verificăm dacă stocarea chiar funcționează (Safari privat: setItem aruncă)
+  state.storageOk = true;
+  try {
+    localStorage.setItem(LS_KEY + '_chk', '1');
+    localStorage.removeItem(LS_KEY + '_chk');
+  } catch (_) { state.storageOk = false; }
   // Cerem stocare persistentă (mai ales pentru iOS/Android eviction).
   try {
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
   } catch (_) {}
   return state.data;
+}
+
+// adoptă date scrise de alt tab (evenimentul 'storage') — fără a suprascrie o lecție în curs
+export function adoptExternal(raw) {
+  const d = parseData(raw);
+  if (!d) return false;
+  state.data = d;
+  state.profile = d.profiles.find(p => p.id === d.active) || d.profiles[0] || null;
+  return true;
+}
+
+// săptămâna curentă (luni) — folosită și de ligă și de gamify, fără import circular
+export function weekStartDate(d = new Date()) {
+  const dt = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = (dt.getDay() + 6) % 7; // 0 = luni
+  dt.setDate(dt.getDate() - day);
+  return dt;
 }
 
 export function addProfile(name, avatar) {

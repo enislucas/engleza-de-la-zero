@@ -1,8 +1,8 @@
 // main.js — pornirea aplicației: stare, voci, service worker, plase de siguranță.
 
-import { load, state, todayStr, save } from './state.js';
+import { load, state, todayStr, save, adoptExternal, applyPrefs } from './state.js';
 import { initSpeech } from './speech.js';
-import { startApp, renderOnboarding, toast, nav } from './ui.js';
+import { startApp, renderOnboarding, toast, nav, isLessonActive } from './ui.js';
 import { syncStreak, syncQuests } from './gamify.js';
 import { syncLeague } from './league.js';
 import { loadCourse } from './course.js';
@@ -30,7 +30,19 @@ async function boot() {
   const splash = document.getElementById('splash');
   if (splash) { splash.classList.add('hide'); setTimeout(() => splash.remove(), 500); }
   registerSW();
+  if (state.storageOk === false) {
+    setTimeout(() => toast('⚠️ Telefonul nu lasă aplicația să salveze. Nu folosi modul privat / incognito.', 6000), 1500);
+  }
 }
+
+// alt tab a salvat date — le adoptăm ca să nu ne suprascriem reciproc progresul
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'ezr_v1' || !e.newValue) return;
+  if (isLessonActive()) return; // nu întrerupem o lecție în curs
+  try {
+    if (adoptExternal(e.newValue)) { applyPrefs(); nav('home'); }
+  } catch (_) {}
+});
 
 // La revenirea în aplicație (a doua zi): resincronizăm seria/misiunile.
 document.addEventListener('visibilitychange', () => {
@@ -76,6 +88,8 @@ function registerSW() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (refreshed) return;
     refreshed = true;
+    // nu reîncărcăm peste o lecție în curs — se aplică la următoarea navigare
+    if (isLessonActive()) { window.__pendingReload = true; return; }
     location.reload();
   });
 }

@@ -31,14 +31,30 @@ export function levenshtein(a, b) {
   return prev[n];
 }
 
-// verificare pentru răspuns scris: iertăm greșeli mici de tastare
+// verificare pentru răspuns scris: iertăm greșeli mici de tastare,
+// dar cuvintele scurte de gramatică (am/is/he/she) trebuie să fie EXACTE —
+// altfel toleranța ar accepta exact greșelile pe care lecția vrea să le corecteze.
 export function checkTyped(input, target) {
   const a = norm(input), b = norm(target);
   if (!a) return { ok: false, exact: false };
   if (a === b) return { ok: true, exact: true };
+  const aw = a.split(' '), bw = b.split(' ');
+  if (aw.length === bw.length) {
+    let minor = 0;
+    for (let i = 0; i < bw.length; i++) {
+      const u = aw[i], t = bw[i];
+      if (u === t) continue;
+      if (t.length <= 3) return { ok: false, exact: false }; // cuvânt scurt greșit = greșeală reală
+      const d = levenshtein(u, t);
+      if (d > 1) return { ok: false, exact: false };
+      minor += d;
+    }
+    if (minor <= Math.max(1, Math.floor(b.length / 8))) return { ok: true, exact: false };
+    return { ok: false, exact: false };
+  }
   const dist = levenshtein(a, b);
   const tol = Math.max(1, Math.floor(b.length / 8));
-  if (dist <= tol) return { ok: true, exact: false }; // "aproape corect" — acceptat, arătăm forma exactă
+  if (dist <= tol) return { ok: true, exact: false };
   return { ok: false, exact: false };
 }
 
@@ -137,8 +153,8 @@ export function buildLesson(unit, spec, opts = {}) {
   const p = state.profile;
   const vmap = Object.fromEntries(unit.vocab.map(v => [v.id, v]));
   const smap = Object.fromEntries((unit.sentences || []).map(s => [s.id, s]));
-  const words = (spec.vocab || []).map(id => vmap[id]).filter(Boolean);
-  const sents = (spec.sentences || []).map(id => smap[id]).filter(Boolean);
+  const words = [...new Set(spec.vocab || [])].map(id => vmap[id]).filter(Boolean);
+  const sents = [...new Set(spec.sentences || [])].map(id => smap[id]).filter(Boolean);
   const pool = unit.vocab.concat(opts.globalVocab || []);
   const exs = [];
 

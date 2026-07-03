@@ -1,9 +1,12 @@
 // sw.js — funcționare offline. Strategie:
-//  - fișierele aplicației (shell): cache-first, precache la instalare
-//  - datele lecțiilor (data/*.json): stale-while-revalidate (merg offline, se împrospătează pe net)
-// La versiune nouă: bump VERSION → clientul primește banner "Actualizează".
+//  - fișierele aplicației (shell): precache la instalare cu ocolirea cache-ului HTTP (cache:'reload'),
+//    ca la o versiune nouă să nu re-prindem fișiere vechi din cache-ul browserului
+//  - datele lecțiilor (data/*.json): cache SEPARAT și stabil (nu se șterge la actualizări de shell),
+//    stale-while-revalidate: merg offline, se împrospătează pe net
+// La versiune nouă: deploy.sh schimbă VERSION → clientul primește banner "Actualizează".
 
 const VERSION = 'ezr-v1.0.0';
+const DATA_CACHE = 'ezr-data-v1';
 const SHELL = [
   './',
   './index.html',
@@ -23,19 +26,22 @@ const SHELL = [
   './js/mascot.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-512-maskable.png',
   './icons/icon-180.png',
 ];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(VERSION).then((c) => c.addAll(SHELL)).catch(() => {})
+    caches.open(VERSION)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
+      .catch(() => {})
   );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== VERSION && k !== DATA_CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -53,13 +59,16 @@ self.addEventListener('fetch', (e) => {
   // datele lecțiilor: servim din cache imediat, împrospătăm în fundal
   if (url.pathname.includes('/data/')) {
     e.respondWith(
-      caches.open(VERSION).then(async (c) => {
+      caches.open(DATA_CACHE).then(async (c) => {
         const cached = await c.match(req, { ignoreSearch: true });
         const fetching = fetch(req).then((res) => {
           if (res && res.ok) c.put(req, res.clone());
           return res;
         }).catch(() => null);
-        return cached || fetching.then((r) => r || new Response('{}', { headers: { 'Content-Type': 'application/json' } }));
+        if (cached) return cached;
+        const fresh = await fetching;
+        // fără date și fără net: răspuns de eroare onest, ca aplicația să arate "reîncearcă"
+        return fresh || new Response('{"offline":true}', { status: 503, headers: { 'Content-Type': 'application/json' } });
       })
     );
     return;

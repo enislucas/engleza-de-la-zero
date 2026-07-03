@@ -101,16 +101,26 @@ function navbar(active) {
 
 // ---------- navigare ----------
 let currentRoute = 'home';
+let navSeq = 0; // jeton anti-randare-întârziată (ecran vechi peste ecran nou)
+
+export function isLessonActive() { return !!lessonState; }
+
 export function nav(route, arg) {
+  navSeq++;
   currentRoute = route;
   stopSpeaking();
+  // o actualizare a aplicației amânată în timpul lecției se aplică acum
+  if (window.__pendingReload && !lessonState) { location.reload(); return; }
   try {
-    if (route === 'home') renderHome();
-    else if (route === 'practice') renderPractice();
-    else if (route === 'league') renderLeague();
-    else if (route === 'quests') renderQuests();
-    else if (route === 'profile') renderProfile();
-    else renderHome();
+    let r;
+    if (route === 'home') r = renderHome();
+    else if (route === 'practice') r = renderPractice();
+    else if (route === 'league') r = renderLeague();
+    else if (route === 'quests') r = renderQuests();
+    else if (route === 'profile') r = renderProfile();
+    else r = renderHome();
+    // ecranele async: orice eroare scăpată ajunge tot la ecranul prietenos
+    if (r && typeof r.catch === 'function') r.catch(renderCrash);
     window.scrollTo(0, 0);
   } catch (err) {
     renderCrash(err);
@@ -240,7 +250,7 @@ export function renderOnboarding() {
     } else if (step === 5) {
       body.appendChild(h('div', 'big-mascot', mascotSvg('cheer')));
       body.appendChild(h('h1', '', `Gata, ${esc(data.name)}!`));
-      body.appendChild(h('p', 'sub', 'Ținta: o lecție pe zi. Atât. Seria 🔥 crește cu fiecare zi în care înveți — și devine greu de abandonat.'));
+      body.appendChild(h('p', 'sub', 'Ținta: o lecție pe zi. Atât. Fiecare lecție îți aduce XP (puncte de progres), iar seria 🔥 crește cu fiecare zi în care înveți.'));
       nextBtn.textContent = 'ÎNCEPE PRIMA LECȚIE';
     }
   }
@@ -434,7 +444,7 @@ function showHeartsModal() {
       else toast('Nu ai destule rubine.');
     });
     body.appendChild(b1);
-    const bf = h('button', 'btn btn-primary btn-big mt8', `Plin complet — 💎 ${G.COSTS.heartsFull}`);
+    const bf = h('button', 'btn btn-primary btn-big mt8', `Vieți pline — 💎 ${G.COSTS.heartsFull}`);
     bf.addEventListener('click', () => {
       if (G.buyHearts('full')) { sfx.gem(); back.remove(); toast('Vieți pline! ❤️❤️❤️❤️❤️'); nav(currentRoute); }
       else toast('Nu ai destule rubine.');
@@ -476,8 +486,10 @@ let lessonState = null;
 
 async function startLesson(unitMeta, lessonIdx, opts = {}) {
   const p = state.profile;
+  const mySeq = navSeq;
   try {
     const unit = await loadUnit(unitMeta.id);
+    if (mySeq !== navSeq) return; // utilizatorul a plecat de pe ecran între timp
     const isTest = !!opts.test;
     if (!opts.review && G.heartsNow(p) === 0) { showHeartsModal(); return; }
 
@@ -509,8 +521,10 @@ async function startLesson(unitMeta, lessonIdx, opts = {}) {
 
 async function startReview() {
   const p = state.profile;
+  const mySeq = navSeq;
   try {
     const datas = await loadStartedUnits(p);
+    if (mySeq !== navSeq) return;
     if (!datas.length) { toast('Termină întâi prima lecție. 🙂'); return; }
     const exercises = buildReview(datas, { canListen: ttsAvailable() });
     if (!exercises.length) { toast('Nu ai încă ce exersa — mai fă o lecție!'); return; }
@@ -527,6 +541,8 @@ async function startReview() {
 
 function renderExercise() {
   const L = lessonState;
+  if (!L) return;
+  L._settled = false; // permite o singură evaluare per exercițiu (anti dublu-tap)
   const a = $app();
   a.innerHTML = '';
   const p = state.profile;
@@ -591,8 +607,9 @@ function renderExercise() {
     checkBtn.style.flex = '1';
     checkBtn.disabled = !handle.ready();
     checkBtn.addEventListener('click', () => {
+      if (L._settled) return;
       const res = handle.check();
-      if (res) finishExercise(res);
+      if (res) { checkBtn.disabled = true; finishExercise(res); }
     });
   } else {
     inner.appendChild(h('div', 'fb', '<div class="fb-s tc">Potrivește toate perechile ca să continui.</div>'));
@@ -600,6 +617,8 @@ function renderExercise() {
   a.appendChild(checkBar);
 
   function finishExercise(res) {
+    if (L._settled) return; // deja evaluat (dublu-tap / autoDone dublu)
+    L._settled = true;
     // înregistrăm SRS
     try { for (const wid of (res.wordIds || [])) recordAnswer(wid, res.ok); } catch (_) {}
     if (res.isIntro || res.skipped) { advance(res); return; }
@@ -629,7 +648,7 @@ function renderExercise() {
     inner.innerHTML = '';
     const fb = h('div', 'fb ' + (res.ok ? 'okc' : 'badc'));
     if (res.ok) {
-      const t = res.almost ? 'Corect! (o literă mică diferență)' : pick(CHEERS);
+      const t = res.almost ? 'Corect! (o mică greșeală de scriere)' : pick(CHEERS);
       fb.appendChild(h('div', 'fb-t', '✅ ' + t));
       if (res.almost) fb.appendChild(h('div', 'fb-s', esc(res.correctText)));
       else if (res.correctText && res.userText && norm(res.userText) !== norm(res.correctText)) fb.appendChild(h('div', 'fb-s', esc(res.correctText)));
@@ -639,7 +658,7 @@ function renderExercise() {
     }
     inner.appendChild(fb);
     const cont = h('button', 'btn ' + (res.ok ? 'btn-primary' : 'btn-danger'), 'CONTINUĂ');
-    cont.addEventListener('click', () => advance(res));
+    cont.addEventListener('click', () => { if (cont.disabled) return; cont.disabled = true; advance(res); });
     inner.appendChild(cont);
     try { cont.focus(); } catch (_) {}
   }
@@ -663,6 +682,9 @@ function finishLesson() {
   const L = lessonState;
   const p = state.profile;
   lessonState = null;
+  // închide săptămâna de ligă dacă tocmai a trecut granița de luni — altfel XP-ul
+  // de acum s-ar vărsa în săptămâna veche
+  try { syncLeague(p); } catch (_) {}
 
   const total = L.right + L.wrong;
   const acc = total ? Math.round((L.right / total) * 100) : 100;
@@ -1113,7 +1135,7 @@ export function startApp() {
   if (ev.frozenUsed) toast('❄️ Un înghețător ți-a salvat seria!', 3500);
   if (ev.lost && G.canRepairStreak(p)) {
     setTimeout(() => {
-      confirmModal('Seria s-a întrerupt 😔', `Seria ta de ${p.game.streak.lostStreak} zile s-a pierdut ieri. O poți repara cu 💎 ${G.COSTS.repair} rubine (ai ${p.game.gems}).`, `Repar-o (💎 ${G.COSTS.repair})`, (yes) => {
+      confirmModal('Seria s-a întrerupt 😔', `Seria ta de ${p.game.streak.lostStreak} zile s-a pierdut ieri. O poți repara cu 💎 ${G.COSTS.repair} rubine (ai ${p.game.gems}).`, `Repară-o (💎 ${G.COSTS.repair})`, (yes) => {
         if (yes) {
           if (G.repairStreak(p)) { sfx.streak(); toast('Seria a fost reparată! 🔥'); nav('home'); }
           else toast('Nu ai destule rubine. 😕');

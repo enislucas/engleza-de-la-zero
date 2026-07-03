@@ -56,10 +56,10 @@ export function speak(text, opts = {}) {
     if (!ttsAvailable() || !text) { resolve(false); return; }
     try {
       const synth = window.speechSynthesis;
-      synth.cancel(); // oprește ce era în curs
       const u = new SpeechSynthesisUtterance(text);
+      const rate = opts.rate || 0.92;
       u.lang = opts.lang || 'en-GB';
-      u.rate = opts.rate || 0.92;
+      u.rate = rate;
       u.pitch = 1;
       if (!opts.lang || /^en/.test(opts.lang)) {
         if (!voicesReady) loadVoices();
@@ -70,12 +70,23 @@ export function speak(text, opts = {}) {
       const finish = (ok) => { if (!done) { done = true; resolve(ok); } };
       u.onend = () => finish(true);
       u.onerror = () => finish(false);
-      // Plasă: dacă onend nu vine (bug cunoscut), eliberăm după un timp proporțional.
-      setTimeout(() => finish(true), 1500 + text.length * 90);
-      synth.speak(u);
-      // Chrome desktop: pauză automată după ~15s — resume periodic inofensiv.
-      if (typeof synth.resume === 'function') {
-        setTimeout(() => { try { if (synth.paused) synth.resume(); } catch (_) {} }, 300);
+      // Plasă: dacă onend nu vine (bug cunoscut), eliberăm după un timp proporțional cu viteza.
+      setTimeout(() => finish(true), (1500 + text.length * 90) / rate);
+      const go = () => {
+        try {
+          synth.speak(u);
+          // Chrome desktop: pauză automată după ~15s — resume periodic inofensiv.
+          if (typeof synth.resume === 'function') {
+            setTimeout(() => { try { if (synth.paused) synth.resume(); } catch (_) {} }, 300);
+          }
+        } catch (_) { finish(false); }
+      };
+      // iOS: cancel() e async sub capotă — speak() imediat după poate fi înghițit.
+      if (synth.speaking || synth.pending) {
+        synth.cancel();
+        setTimeout(go, 80);
+      } else {
+        go();
       }
     } catch (_) { resolve(false); }
   });

@@ -31,7 +31,7 @@
     {"id": "s06", "en": "They are at home.", "ro": "Ei sunt acasă.", "words": ["w_they", "w_are", "w_home"]},
     {"id": "s07", "en": "I am tired.", "ro": "Eu sunt obosit.", "words": ["w_i", "w_am", "w_tired"]},
     {"id": "s08", "en": "She is happy.", "ro": "Ea este fericită.", "words": ["w_she", "w_is", "w_happy"]},
-    {"id": "s09", "en": "We are hungry.", "ro": "Nouă ne este foame.", "words": ["w_we", "w_are", "w_hungry"]},
+    {"id": "s09", "en": "We are hungry.", "ro": "Noi suntem flămânzi.", "words": ["w_we", "w_are", "w_hungry"]},
     {"id": "s10", "en": "My mother is at home.", "ro": "Mama mea este acasă.", "words": ["w_mother", "w_is", "w_home"]},
     {"id": "s11", "en": "My father is tired.", "ro": "Tatăl meu este obosit.", "words": ["w_father", "w_is", "w_tired"]},
     {"id": "s12", "en": "I am 50.", "ro": "Am 50 de ani.", "words": ["w_i", "w_am"]}

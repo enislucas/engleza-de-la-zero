@@ -13,7 +13,9 @@ async function fetchJson(url) {
 
 export async function loadCourse() {
   if (course.meta) return course.meta;
-  course.meta = await fetchJson('data/course.json');
+  const d = await fetchJson('data/course.json');
+  if (!d || !Array.isArray(d.units) || !d.units.length) throw new Error('curs invalid');
+  course.meta = d;
   return course.meta;
 }
 

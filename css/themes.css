@@ -5,7 +5,8 @@
 :root, :root[data-theme="vesel"] {
   --bg: #ffffff; --bg2: #f3f7f2; --card: #ffffff;
   --text: #3c3c3c; --text2: #8a8a8a; --line: #e5e5e5;
-  --primary: #58cc02; --primary-dk: #46a302; --primary-text: #3ea302; --on-primary: #ffffff;
+  /* text ÎNCHIS pe verde: alb pe #58cc02 are contrast doar ~2:1 — insuficient la 55+ */
+  --primary: #58cc02; --primary-dk: #46a302; --primary-text: #3a7d00; --on-primary: #163300;
   --accent: #1cb0f6; --accent-dk: #1590ca; --accent-bg: #e3f4fd; --accent-text: #1487bd;
   --gold: #ffc800; --gold-dk: #e0ab00; --gold-text: #c98f00;
   --danger: #eb5252; --danger-dk: #c74444; --danger-bg: #fdecec;
@@ -17,7 +18,7 @@
 :root[data-theme="cald"] {
   --bg: #fdf6ec; --bg2: #f2e7d8; --card: #fffdf8;
   --text: #45372b; --text2: #97846f; --line: #eadfce;
-  --primary: #d96f32; --primary-dk: #b55726; --primary-text: #bb5c26; --on-primary: #ffffff;
+  --primary: #d96f32; --primary-dk: #b55726; --primary-text: #a34d1c; --on-primary: #3a1503;
   --accent: #2a9d8f; --accent-dk: #21857a; --accent-bg: #e2f2f0; --accent-text: #1f7d72;
   --gold: #e9c46a; --gold-dk: #cfa64a; --gold-text: #a67c1b;
   --danger: #d94f4f; --danger-dk: #b54040; --danger-bg: #fbeaea;

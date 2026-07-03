@@ -123,8 +123,10 @@ export function syncStreak(p = state.profile) {
   if (s.lastDay === today || s.lastDay === yest) return ev;
   // A trecut cel puțin o zi fără activitate.
   if (s.travel) return ev; // Protocol de călătorie: seria e pe pauză, nimic nu se pierde.
-  // Câte zile lipsă între lastDay și ieri?
-  const missed = Math.max(1, Math.round((new Date(today) - new Date(s.lastDay)) / 86400000) - 1);
+  // Câte zile lipsă între lastDay și ieri? (dacă data pare să fi mers înapoi, nu atingem seria)
+  const diffDays = Math.round((new Date(today) - new Date(s.lastDay)) / 86400000);
+  if (diffDays <= 1) return ev;
+  const missed = diffDays - 1;
   let remaining = missed;
   while (remaining > 0 && s.freezes > 0) { s.freezes--; remaining--; ev.frozenUsed = true; }
   if (remaining > 0) {
