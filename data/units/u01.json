@@ -1,0 +1,71 @@
+{
+  "book": 1,
+  "vocab": [
+    {"id": "w_i", "en": "I", "ro": "eu", "pron": "ai", "cat": "pronume"},
+    {"id": "w_you", "en": "you", "ro": "tu / voi", "pron": "iu", "cat": "pronume"},
+    {"id": "w_he", "en": "he", "ro": "el", "pron": "hi", "cat": "pronume"},
+    {"id": "w_she", "en": "she", "ro": "ea", "pron": "și", "cat": "pronume"},
+    {"id": "w_we", "en": "we", "ro": "noi", "pron": "ui", "cat": "pronume"},
+    {"id": "w_they", "en": "they", "ro": "ei / ele", "pron": "dei", "cat": "pronume"},
+    {"id": "w_am", "en": "am", "ro": "sunt (eu)", "pron": "em", "cat": "verb"},
+    {"id": "w_is", "en": "is", "ro": "este", "pron": "iz", "cat": "verb"},
+    {"id": "w_are", "en": "are", "ro": "ești / sunt", "pron": "ar", "cat": "verb"},
+    {"id": "w_family", "en": "family", "ro": "familie", "pron": "femili", "cat": "substantiv"},
+    {"id": "w_mother", "en": "mother", "ro": "mamă", "pron": "madăr", "cat": "substantiv"},
+    {"id": "w_father", "en": "father", "ro": "tată", "pron": "fadăr", "cat": "substantiv"},
+    {"id": "w_son", "en": "son", "ro": "fiu", "pron": "san", "cat": "substantiv"},
+    {"id": "w_wife", "en": "wife", "ro": "soție", "pron": "uaif", "cat": "substantiv"},
+    {"id": "w_husband", "en": "husband", "ro": "soț", "pron": "hazbend", "cat": "substantiv"},
+    {"id": "w_tired", "en": "tired", "ro": "obosit", "pron": "taiărd", "cat": "adjectiv"},
+    {"id": "w_happy", "en": "happy", "ro": "fericit", "pron": "hepi", "cat": "adjectiv"},
+    {"id": "w_hungry", "en": "hungry", "ro": "flămând", "pron": "hangri", "cat": "adjectiv"},
+    {"id": "w_cold", "en": "cold", "ro": "frig / rece", "pron": "cold", "cat": "adjectiv"},
+    {"id": "w_home", "en": "home", "ro": "acasă", "pron": "hom", "cat": "substantiv"}
+  ],
+  "sentences": [
+    {"id": "s01", "en": "I am Maria.", "ro": "Eu sunt Maria.", "words": ["w_i", "w_am"]},
+    {"id": "s02", "en": "You are my friend.", "ro": "Tu ești prietenul meu.", "words": ["w_you", "w_are"]},
+    {"id": "s03", "en": "He is my son.", "ro": "El este fiul meu.", "words": ["w_he", "w_is", "w_son"]},
+    {"id": "s04", "en": "She is my wife.", "ro": "Ea este soția mea.", "words": ["w_she", "w_is", "w_wife"]},
+    {"id": "s05", "en": "We are a family.", "ro": "Noi suntem o familie.", "words": ["w_we", "w_are", "w_family"]},
+    {"id": "s06", "en": "They are at home.", "ro": "Ei sunt acasă.", "words": ["w_they", "w_are", "w_home"]},
+    {"id": "s07", "en": "I am tired.", "ro": "Eu sunt obosit.", "words": ["w_i", "w_am", "w_tired"]},
+    {"id": "s08", "en": "She is happy.", "ro": "Ea este fericită.", "words": ["w_she", "w_is", "w_happy"]},
+    {"id": "s09", "en": "We are hungry.", "ro": "Nouă ne este foame.", "words": ["w_we", "w_are", "w_hungry"]},
+    {"id": "s10", "en": "My mother is at home.", "ro": "Mama mea este acasă.", "words": ["w_mother", "w_is", "w_home"]},
+    {"id": "s11", "en": "My father is tired.", "ro": "Tatăl meu este obosit.", "words": ["w_father", "w_is", "w_tired"]},
+    {"id": "s12", "en": "I am 50.", "ro": "Am 50 de ani.", "words": ["w_i", "w_am"]}
+  ],
+  "grammar": [
+    {
+      "id": "g1",
+      "title": "Cele trei forme ale lui „to be”",
+      "body": "În engleză, „a fi” are trei forme la prezent: I AM (eu sunt), he/she/it IS (el/ea este), you/we/they ARE (tu ești, noi/voi/ei sunt). Regulă simplă: el/ea/lucrul primesc IS, toți ceilalți AM sau ARE.",
+      "examples": [
+        {"en": "I am Maria.", "ro": "Eu sunt Maria."},
+        {"en": "He is my son.", "ro": "El este fiul meu."},
+        {"en": "We are a family.", "ro": "Noi suntem o familie."},
+        {"en": "They are at home.", "ro": "Ei sunt acasă."}
+      ]
+    },
+    {
+      "id": "g2",
+      "title": "Vârsta se spune cu „to be”, nu cu „have”",
+      "body": "În engleză NU spui „am 50 de ani” cu verbul „a avea”. Se folosește „to be”: I AM 50. Aceasta e una dintre cele mai frecvente greșeli ale românilor.",
+      "examples": [
+        {"en": "I am 50.", "ro": "Am 50 de ani."},
+        {"en": "He is 25.", "ro": "El are 25 de ani."}
+      ]
+    }
+  ],
+  "traps": [
+    {"wrong": "I have 50 years.", "right": "I am 50.", "why": "Vârsta se spune cu „to be”, nu cu „have”."},
+    {"wrong": "I tired.", "right": "I am tired.", "why": "În engleză verbul „to be” nu se sare niciodată: I AM tired."}
+  ],
+  "lessons": [
+    {"id": "u01l1", "title": "Eu, tu, el", "vocab": ["w_i", "w_you", "w_he", "w_she", "w_we", "w_they"], "sentences": ["s01", "s02"], "grammar": "g1"},
+    {"id": "u01l2", "title": "Sunt / ești / este", "vocab": ["w_am", "w_is", "w_are", "w_i", "w_he"], "sentences": ["s01", "s03", "s05", "s06", "s12"], "grammar": "g1"},
+    {"id": "u01l3", "title": "Familia mea", "vocab": ["w_family", "w_mother", "w_father", "w_son", "w_wife", "w_husband"], "sentences": ["s03", "s04", "s05", "s10"], "grammar": null},
+    {"id": "u01l4", "title": "Cum te simți", "vocab": ["w_tired", "w_happy", "w_hungry", "w_cold", "w_home"], "sentences": ["s06", "s07", "s08", "s09", "s11"], "grammar": "g2"}
+  ]
+}

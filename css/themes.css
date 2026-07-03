@@ -1,0 +1,57 @@
+/* ============ 4 teme: vesel / cald / minimal / noapte ============ */
+/* Aplicate cu <html data-theme="...">. Toate folosesc aceleași variabile. */
+
+/* ---- 1. VESEL — colorat, jucăuș (implicit) ---- */
+:root, :root[data-theme="vesel"] {
+  --bg: #ffffff; --bg2: #f3f7f2; --card: #ffffff;
+  --text: #3c3c3c; --text2: #8a8a8a; --line: #e5e5e5;
+  --primary: #58cc02; --primary-dk: #46a302; --primary-text: #3ea302; --on-primary: #ffffff;
+  --accent: #1cb0f6; --accent-dk: #1590ca; --accent-bg: #e3f4fd; --accent-text: #1487bd;
+  --gold: #ffc800; --gold-dk: #e0ab00; --gold-text: #c98f00;
+  --danger: #eb5252; --danger-dk: #c74444; --danger-bg: #fdecec;
+  --success: #58cc02; --success-bg: #eaf7df; --success-text: #3d8f01;
+  --locked: #e5e5e5; --locked-dk: #cfcfcf;
+}
+
+/* ---- 2. CALD — culori calde, primitor ---- */
+:root[data-theme="cald"] {
+  --bg: #fdf6ec; --bg2: #f2e7d8; --card: #fffdf8;
+  --text: #45372b; --text2: #97846f; --line: #eadfce;
+  --primary: #d96f32; --primary-dk: #b55726; --primary-text: #bb5c26; --on-primary: #ffffff;
+  --accent: #2a9d8f; --accent-dk: #21857a; --accent-bg: #e2f2f0; --accent-text: #1f7d72;
+  --gold: #e9c46a; --gold-dk: #cfa64a; --gold-text: #a67c1b;
+  --danger: #d94f4f; --danger-dk: #b54040; --danger-bg: #fbeaea;
+  --success: #6aa84f; --success-bg: #ecf4e6; --success-text: #4d8038;
+  --locked: #eadfce; --locked-dk: #d8c9b2;
+}
+
+/* ---- 3. MINIMAL — modern, curat, o singură culoare ---- */
+:root[data-theme="minimal"] {
+  --bg: #ffffff; --bg2: #f4f5f7; --card: #ffffff;
+  --text: #111827; --text2: #6b7280; --line: #e5e7eb;
+  --primary: #2563eb; --primary-dk: #1d4fc4; --primary-text: #1d4ed8; --on-primary: #ffffff;
+  --accent: #0891b2; --accent-dk: #06758f; --accent-bg: #e0f4f9; --accent-text: #0e7490;
+  --gold: #f59e0b; --gold-dk: #d18708; --gold-text: #b45309;
+  --danger: #dc2626; --danger-dk: #b31f1f; --danger-bg: #fdecec;
+  --success: #16a34a; --success-bg: #e8f7ee; --success-text: #15803d;
+  --locked: #e5e7eb; --locked-dk: #d1d5db;
+  --radius: 14px;
+}
+
+/* ---- 4. NOAPTE — întunecat, contrast mare, text mare ---- */
+:root[data-theme="noapte"] {
+  --bg: #131f24; --bg2: #0d161a; --card: #1c2b33;
+  --text: #f1f7fb; --text2: #9db3bd; --line: #37464f;
+  --primary: #79d21f; --primary-dk: #58a312; --primary-text: #8ee03a; --on-primary: #10240b;
+  --accent: #4cc2ff; --accent-dk: #2f9fd8; --accent-bg: #16323f; --accent-text: #6fcfff;
+  --gold: #ffd23e; --gold-dk: #dcaf1e; --gold-text: #ffd94f;
+  --danger: #ff7070; --danger-dk: #d15050; --danger-bg: #3a2026;
+  --success: #79d21f; --success-bg: #1e3423; --success-text: #9be55c;
+  --locked: #37464f; --locked-dk: #26333a;
+}
+:root[data-theme="noapte"] .lesson-btn.done { color: #4a3800; }
+:root[data-theme="noapte"] .cal .c-d.hit { color: #4a3800; }
+:root[data-theme="noapte"] #splash, :root[data-theme="noapte"] #boot-error { background: #131f24; }
+:root[data-theme="noapte"] .boot-error-card { background: #1c2b33; }
+:root[data-theme="noapte"] .boot-error-card h2 { color: #f1f7fb; }
+:root[data-theme="noapte"] .toast { background: #f1f7fb; color: #131f24; }

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#58cc02">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Engleza">
+<title>Engleza de la Zero</title>
+<meta name="description" content="Învață engleza pas cu pas — lecții scurte, zilnice, în română.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="css/base.css?v=APPV">
+<link rel="stylesheet" href="css/themes.css?v=APPV">
+<script>
+// Global error net: never white-screen. Show a friendly Romanian message + reload button.
+window.addEventListener('error', function (e) {
+  try {
+    var boot = document.getElementById('boot-error');
+    if (boot && !window.__appStarted) { boot.style.display = 'flex'; }
+    if (window.__logErr) window.__logErr(e.message || 'error');
+  } catch (_) {}
+});
+window.addEventListener('unhandledrejection', function (e) {
+  try { if (window.__logErr) window.__logErr('promise: ' + (e.reason && e.reason.message || e.reason)); } catch (_) {}
+});
+// Capturăm evenimentul de instalare cât mai devreme (modulele se încarcă mai târziu).
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  window.__bip = e;
+});
+window.addEventListener('appinstalled', function () { window.__bip = null; window.__installed = true; });
+</script>
+</head>
+<body>
+<noscript>
+  <div style="padding:40px;text-align:center;font-family:sans-serif">
+    <h2>Aplicația are nevoie de JavaScript.</h2>
+    <p>Deschide aplicația în Chrome sau Safari.</p>
+  </div>
+</noscript>
+
+<!-- Boot splash: visible instantly, removed by app when ready -->
+<div id="splash" aria-hidden="true">
+  <div class="splash-inner">
+    <div id="splash-mascot"></div>
+    <div class="splash-title">Engleza de la Zero</div>
+    <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+  </div>
+</div>
+
+<!-- Boot error (only if app fails before first render) -->
+<div id="boot-error" style="display:none">
+  <div class="boot-error-card">
+    <div style="font-size:44px">😕</div>
+    <h2>Ceva nu a mers.</h2>
+    <p>Nu-i nimic — apasă butonul și aplicația repornește. Progresul tău este salvat.</p>
+    <button onclick="location.reload()" class="btn btn-primary btn-big">Repornește</button>
+  </div>
+</div>
+
+<div id="app" aria-live="polite"></div>
+
+<!-- Update banner injected by main.js when a new version is available -->
+
+<script type="module" src="js/main.js?v=APPV"></script>
+</body>
+</html>

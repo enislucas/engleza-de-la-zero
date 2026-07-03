@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head><meta charset="UTF-8"><title>Self-test</title></head>
+<body>
+<pre id="out">RUNNING</pre>
+<script type="module">
+const out = [];
+const t = (name, fn) => {
+  try {
+    const r = fn();
+    if (r === false) out.push('FAIL ' + name);
+    else out.push('pass ' + name);
+  } catch (e) { out.push('FAIL ' + name + ' :: ' + (e && e.message)); }
+};
+const ta = async (name, fn) => {
+  try {
+    const r = await fn();
+    if (r === false) out.push('FAIL ' + name);
+    else out.push('pass ' + name);
+  } catch (e) { out.push('FAIL ' + name + ' :: ' + (e && e.message)); }
+};
+
+(async () => {
+  try {
+    localStorage.clear();
+    const S = await import('./js/state.js');
+    const E = await import('./js/engine.js');
+    const G = await import('./js/gamify.js');
+    const L = await import('./js/league.js');
+    const C = await import('./js/course.js');
+    const M = await import('./js/mascot.js');
+    const X = await import('./js/exercises.js');
+    const SP = await import('./js/speech.js');
+    const U = await import('./js/ui.js');
+
+    // ---- state ----
+    await ta('state.load fresh', async () => { const d = await S.load(); return !!d && Array.isArray(d.profiles); });
+    t('addProfile', () => { const p = S.addProfile('Test', '🙂'); return S.state.profile === p && p.game.hearts === 5; });
+    t('export/import roundtrip', () => {
+      const code = S.exportCode();
+      S.state.profile.game.xp = 77; S.save(true);
+      const code2 = S.exportCode();
+      if (!S.importCode(code)) return false;
+      if (S.state.profile.game.xp !== 0) return false;
+      if (!S.importCode(code2)) return false;
+      return S.state.profile.game.xp === 77;
+    });
+    t('importCode garbage rejected', () => S.importCode('nu-e-cod') === false && S.importCode('') === false);
+
+    // ---- engine ----
+    t('norm', () => E.norm("  I’m  FINE! ") === "i'm fine");
+    t('levenshtein', () => E.levenshtein('kitten', 'sitting') === 3 && E.levenshtein('a', 'a') === 0);
+    t('checkTyped exact', () => E.checkTyped('I am tired.', 'I am tired').ok === true);
+    t('checkTyped typo ok', () => E.checkTyped('I am tirred', 'I am tired').ok === true);
+    t('checkTyped wrong', () => E.checkTyped('I am happy', 'I am tired').ok === false);
+    t('checkSpoken', () => E.checkSpoken(['i am tired'], 'I am tired.').ok === true && E.checkSpoken(['hello world'], 'I am tired.').ok === false);
+    t('recordAnswer SRS up/down', () => {
+      E.recordAnswer('wx', true);
+      const w1 = S.state.profile.game.words['wx'];
+      if (w1.s !== 1) return false;
+      E.recordAnswer('wx', false);
+      return S.state.profile.game.words['wx'].s === 0;
+    });
+
+    // ---- course + lesson build ----
+    await ta('loadCourse', async () => { const m = await C.loadCourse(); return m.units.length >= 1; });
+    await ta('loadUnit u01', async () => { const u = await C.loadUnit('u01'); return u.vocab.length >= 15 && u.lessons.length === 4; });
+    await ta('buildLesson has intro + drills', async () => {
+      const u = await C.loadUnit('u01');
+      const exs = E.buildLesson(u, u.lessons[0], { canListen: true, canSpeak: true, unit: u });
+      if (exs.length < 5 || exs.length > 12) return false;
+      if (!exs.some(x => x.type === 'wordcard')) return false;
+      // opțiunile MCQ nu au duplicate
+      for (const x of exs) {
+        if (x.opts4) {
+          const ros = x.opts4.map(o => o.ro);
+          if (new Set(ros).size !== ros.length) return false;
+          if (x.opts4.length !== 4) return false;
+        }
+      }
+      return true;
+    });
+    await ta('buildLesson test-mode', async () => {
+      const u = await C.loadUnit('u01');
+      const exs = E.buildLesson(u, { vocab: u.lessons.flatMap(l => l.vocab), sentences: u.lessons.flatMap(l => l.sentences), grammar: 'g1' }, { test: true, canListen: true, unit: u });
+      return exs.length >= 8 && !exs.some(x => x.type === 'wordcard');
+    });
+    await ta('buildReview after answers', async () => {
+      const u = await C.loadUnit('u01');
+      for (const v of u.vocab.slice(0, 6)) E.recordAnswer(v.id, false); // slabe → scadente azi? due = azi+0
+      const exs = E.buildReview([u], { canListen: false });
+      return exs.length >= 3;
+    });
+
+    // ---- gamify ----
+    t('hearts lose/regen math', () => {
+      const p = S.state.profile;
+      p.game.hearts = 5; G.loseHeart(p);
+      if (p.game.hearts !== 4) return false;
+      p.game.heartsAt = Date.now() - 3.2 * 3600 * 1000;
+      return G.heartsNow(p) === 5;
+    });
+    t('addXp + boost', () => {
+      const p = S.state.profile;
+      const before = p.game.xp;
+      p.game.boost = { until: Date.now() + 60000 };
+      const got = G.addXp(10, p);
+      return got === 20 && p.game.xp === before + 20;
+    });
+    t('streak hit + milestone at 3', () => {
+      const p = S.state.profile;
+      p.game.streak = { count: 2, lastDay: '2000-01-02', freezes: 0, travel: false };
+      const r = G.hitStreakToday(p);
+      return r.extended && p.game.streak.count === 3 && r.milestone === 3;
+    });
+    t('streak lost without freeze', () => {
+      const p = S.state.profile;
+      p.game.streak = { count: 10, lastDay: '2020-01-01', freezes: 0, travel: false };
+      const ev = G.syncStreak(p);
+      return ev.lost && p.game.streak.count === 0 && G.canRepairStreak(p);
+    });
+    t('streak saved by freeze', () => {
+      const p = S.state.profile;
+      const d = new Date(); d.setDate(d.getDate() - 2);
+      p.game.streak = { count: 10, lastDay: S.todayStr(d), freezes: 1, travel: false };
+      const ev = G.syncStreak(p);
+      return ev.frozenUsed && p.game.streak.count === 10 && p.game.streak.freezes === 0;
+    });
+    t('travel protocol pauses', () => {
+      const p = S.state.profile;
+      p.game.streak = { count: 10, lastDay: '2020-01-01', freezes: 0, travel: true };
+      const ev = G.syncStreak(p);
+      return !ev.lost && p.game.streak.count === 10;
+    });
+    t('quests generate 2 + progress', () => {
+      const p = S.state.profile;
+      p.game.quests = { day: '', list: [] };
+      const list = G.syncQuests(p);
+      if (list.length !== 2) return false;
+      G.questEvent({ xp: 20 }, p);
+      const q = p.game.quests.list.find(x => x.kind === 'xp');
+      return q.progress >= 20 || q.progress === q.goal;
+    });
+
+    // ---- league ----
+    t('league standings 10 rows, me included, sorted', () => {
+      const p = S.state.profile;
+      p.game.league = { tier: 0, weekId: L.weekId(), xpWeek: 55, history: [] };
+      const st = L.standings(p);
+      if (st.length !== 10) return false;
+      if (!st.some(r => r.me)) return false;
+      for (let i = 1; i < st.length; i++) if (st[i].xp > st[i - 1].xp) return false;
+      return true;
+    });
+    t('league deterministic within week', () => {
+      const p = S.state.profile;
+      const a = L.standings(p).map(r => r.name + r.xp).join('|');
+      const b = L.standings(p).map(r => r.name + r.xp).join('|');
+      return a === b;
+    });
+    t('league week close promotes on high xp', () => {
+      const p = S.state.profile;
+      const lastMonday = new Date(L.weekId()); lastMonday.setDate(lastMonday.getDate() - 7);
+      p.game.league = { tier: 0, weekId: S.todayStr(lastMonday), xpWeek: 99999, history: [] };
+      const ev = L.syncLeague(p);
+      return ev.closed && ev.promoted && p.game.league.tier === 1 && p.game.league.xpWeek === 0;
+    });
+
+    // ---- mascot & speech guards ----
+    t('mascot svgs render', () => ['happy','cheer','sad','think','sleep','travel','teach'].every(m => M.mascotSvg(m).includes('<svg')));
+    t('speech guards no-crash', () => { SP.stopSpeaking(); SP.stopListening(); return typeof SP.sttAvailable() === 'boolean'; });
+
+    // ---- exercises mount smoke (fiecare tip montează fără erori) ----
+    await ta('mount all exercise types', async () => {
+      const u = await C.loadUnit('u01');
+      const w = u.vocab[0];
+      const s = u.sentences[0];
+      const mk = () => document.createElement('div');
+      const ctx = { refresh() {}, autoDone() {}, allowSkipAsOk() {} };
+      const types = [
+        { type: 'wordcard', word: w },
+        { type: 'mcq_en_ro', word: w, opts4: u.vocab.slice(0, 4) },
+        { type: 'mcq_ro_en', word: w, opts4: u.vocab.slice(0, 4) },
+        { type: 'listen_mcq', word: w, opts4: u.vocab.slice(0, 4) },
+        { type: 'wordbank', sentence: s, bank: { words: s.en.split(' '), chips: s.en.split(' ') } },
+        { type: 'listen_bank', sentence: s, bank: { words: s.en.split(' '), chips: s.en.split(' ') } },
+        { type: 'type_en', sentence: s },
+        { type: 'listen_type', sentence: s },
+        { type: 'speak', sentence: s },
+        { type: 'match', pairs: u.vocab.slice(0, 5) },
+        { type: 'trap', trap: u.traps[0] },
+        { type: 'fill_blank', sentence: s, blanked: '____ am Maria.', answer: 'I', options: ['I', 'He', 'We', 'They'] },
+      ];
+      for (const ex of types) {
+        const el = mk();
+        const hd = X.mountExercise(el, ex, ctx);
+        if (!hd || typeof hd.check !== 'function') return false;
+        if (!el.childNodes.length) return false;
+      }
+      return true;
+    });
+
+    // ---- ui start smoke ----
+    await ta('ui module loads + startApp does not throw', async () => {
+      const app = document.createElement('div'); app.id = 'app'; document.body.appendChild(app);
+      U.startApp();
+      await new Promise(r => setTimeout(r, 600));
+      return app.innerHTML.length > 50;
+    });
+  } catch (e) {
+    out.push('FATAL :: ' + (e && (e.message + ' ' + (e.stack || '')).slice(0, 400)));
+  }
+  const fails = out.filter(l => l.startsWith('FAIL') || l.startsWith('FATAL')).length;
+  out.unshift(`RESULT ${fails === 0 ? 'ALL-PASS' : fails + '-FAILURES'} (${out.length} checks)`);
+  document.getElementById('out').textContent = out.join('\n');
+  document.title = 'DONE';
+  // raportăm și prin logul serverului local (pentru rulare headless)
+  try {
+    const bad = out.filter(l => !l.startsWith('pass')).join(' || ').slice(0, 1500);
+    await fetch('/__testresult__/' + encodeURIComponent(bad || 'ALL-PASS-' + out.length)).catch(() => {});
+  } catch (_) {}
+})();
+</script>
+</body>
+</html>

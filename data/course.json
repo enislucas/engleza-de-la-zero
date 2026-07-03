@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "units": [
+    {
+      "id": "u01",
+      "book": 1,
+      "title": "Cine sunt eu",
+      "sub": "Verbul „a fi” — am, is, are",
+      "ico": "👋",
+      "cefr": "A0",
+      "lessonCount": 4,
+      "lessonTitles": ["Eu, tu, el", "Sunt / ești / este", "Familia mea", "Cum te simți"],
+      "file": "units/u01.json"
+    }
+  ]
+}
