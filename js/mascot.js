@@ -77,4 +77,9 @@ export const SOFT_WRONG = [
   'Se întâmplă oricui. Corect era:',
   'Data viitoare iese. Răspunsul corect:',
 ];
+export const RETRY_SOON = [
+  'Nu chiar — mai gândește-te puțin.',
+  'Aproape! Îl mai încercăm o dată.',
+  'Nu-i nimic — data viitoare îl prinzi.',
+];
 export function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }

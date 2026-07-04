@@ -5,23 +5,50 @@
 //  - SpeechRecognition: doar Chrome/Android real; pe iOS standalone e stricat → fallback.
 //  - continuous=false întotdeauna (bug onend pe Android).
 
+import { state } from './state.js';
+
 let voices = [];
 let voicesReady = false;
 let enVoice = null;
 
+// Scor de naturalețe: vocile neurale ("Natural"/"Online"/"Neural"/"Premium"/"Enhanced")
+// sună incomparabil mai bine decât cele robotice clasice — le preferăm agresiv.
+function voiceScore(v) {
+  const n = (v.name || '').toLowerCase();
+  let s = 0;
+  if (n.includes('natural')) s += 100;
+  if (n.includes('neural')) s += 90;
+  if (n.includes('online')) s += 60;
+  if (n.includes('premium') || n.includes('enhanced')) s += 50;
+  if (n.includes('google')) s += 45;
+  if (/\bsonia|libby|ryan|mia|kate|serena|daniel\b/.test(n)) s += 15;
+  if (/en[-_]GB/i.test(v.lang)) s += 30;
+  else if (/^en/i.test(v.lang)) s += 5;
+  if (!v.localService) s += 8; // vocile din rețea sunt de regulă mai naturale pe Android
+  return s;
+}
+
+export function listEnVoices() {
+  return voices.filter(v => /^en/i.test(v.lang)).sort((a, b) => voiceScore(b) - voiceScore(a));
+}
+
 function pickEnVoice() {
   if (!voices.length) return null;
-  // Preferință: en-GB (seria de cărți e engleză britanică), apoi orice en.
-  const gb = voices.filter(v => /en[-_]GB/i.test(v.lang));
-  const en = voices.filter(v => /^en/i.test(v.lang));
-  const pref = (list) => {
-    if (!list.length) return null;
-    // Voci "Google" / "Samantha" / "Daniel" tind să fie cele mai naturale.
-    return list.find(v => /google/i.test(v.name))
-        || list.find(v => /daniel|serena|kate|stephanie/i.test(v.name))
-        || list[0];
-  };
-  return pref(gb) || pref(en);
+  // 1) alegerea explicită a utilizatorului (Profil → Vocea)
+  const wanted = state.profile && state.profile.voiceName;
+  if (wanted) {
+    const hit = voices.find(v => v.name === wanted);
+    if (hit) return hit;
+  }
+  // 2) cea mai naturală voce disponibilă
+  const en = listEnVoices();
+  return en[0] || null;
+}
+
+// re-alege vocea (după schimbarea setării sau a profilului)
+export function refreshVoice() {
+  enVoice = pickEnVoice();
+  return enVoice;
 }
 
 function loadVoices() {

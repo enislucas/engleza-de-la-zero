@@ -32,6 +32,11 @@ export async function loadUnit(unitId) {
   data.grammar = Array.isArray(data.grammar) ? data.grammar : [];
   data.traps = Array.isArray(data.traps) ? data.traps : [];
   data.lessons = Array.isArray(data.lessons) ? data.lessons : [];
+  data.dialogues = (Array.isArray(data.dialogues) ? data.dialogues : [])
+    .filter(d => d && Array.isArray(d.lines) && d.lines.length >= 2);
+  data.writing = (Array.isArray(data.writing) ? data.writing : [])
+    .filter(w => w && w.prompt && w.modelEn)
+    .map(w => ({ ...w, required: Array.isArray(w.required) ? w.required : [], starters: Array.isArray(w.starters) ? w.starters : [], tips: Array.isArray(w.tips) ? w.tips : [] }));
   course.units[unitId] = data;
   return data;
 }

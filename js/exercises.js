@@ -89,8 +89,8 @@ function mountMcq(el, ex, ctx, dir) {
       if (!sel) return null;
       const ok = sel.o.id === w.id;
       sel.b.classList.add(ok ? 'correct' : 'wrong');
-      if (!ok) {
-        // evidențiem răspunsul corect
+      if (!ok && ctx.reveal) {
+        // răspunsul corect se arată abia la a doua ratare (întâi îl cauți singur)
         [...optsEl.children].forEach((b, i) => { if (ex.opts4[i].id === w.id) b.classList.add('correct'); });
       }
       optsEl.querySelectorAll('.opt').forEach(x => x.disabled = true);
@@ -127,7 +127,7 @@ function mountListenMcq(el, ex, ctx) {
       if (!sel) return null;
       const ok = sel.o.id === w.id;
       sel.b.classList.add(ok ? 'correct' : 'wrong');
-      if (!ok) [...optsEl.children].forEach((b, i) => { if (ex.opts4[i].id === w.id) b.classList.add('correct'); });
+      if (!ok && ctx.reveal) [...optsEl.children].forEach((b, i) => { if (ex.opts4[i].id === w.id) b.classList.add('correct'); });
       optsEl.querySelectorAll('.opt').forEach(x => x.disabled = true);
       return { ok, correctText: `${w.en} = ${w.ro}`, userText: sel.o.ro, wordIds: [w.id], isListen: true };
     },
@@ -368,7 +368,7 @@ function mountTrap(el, ex, ctx) {
       if (!sel) return null;
       const ok = sel.o.ok;
       sel.b.classList.add(ok ? 'correct' : 'wrong');
-      if (!ok) [...optsEl.children].forEach((b, i) => { if (options[i].ok) b.classList.add('correct'); });
+      if (!ok && ctx.reveal) [...optsEl.children].forEach((b, i) => { if (options[i].ok) b.classList.add('correct'); });
       optsEl.querySelectorAll('.opt').forEach(x => x.disabled = true);
       return { ok, correctText: t.right + (t.why ? ' — ' + t.why : ''), userText: sel.o.txt, wordIds: [] };
     },
@@ -397,7 +397,7 @@ function mountFillBlank(el, ex, ctx) {
       if (!sel) return null;
       const ok = norm(sel.o) === norm(ex.answer);
       sel.b.classList.add(ok ? 'correct' : 'wrong');
-      if (!ok) [...optsEl.children].forEach((b) => { if (norm(b.textContent) === norm(ex.answer)) b.classList.add('correct'); });
+      if (!ok && ctx.reveal) [...optsEl.children].forEach((b) => { if (norm(b.textContent) === norm(ex.answer)) b.classList.add('correct'); });
       optsEl.querySelectorAll('.opt').forEach(x => x.disabled = true);
       return { ok, correctText: ex.sentence.en, userText: sel.o, wordIds: ex.sentence.words || [] };
     },

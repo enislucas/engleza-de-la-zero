@@ -26,7 +26,14 @@ function tone(freq, t0, dur, type = 'sine', gain = 0.12) {
 function on() { return !state.profile || state.profile.soundOn !== false; }
 
 export const sfx = {
-  correct() { if (!on()) return; tone(660, 0, 0.12, 'sine'); tone(880, 0.09, 0.18, 'sine'); },
+  // sunetul de corect urcă în ton cu fiecare răspuns bun la rând — mica scară a victoriei
+  correct(combo = 0) {
+    if (!on()) return;
+    const k = Math.pow(2, Math.min(combo, 8) / 16);
+    tone(660 * k, 0, 0.12, 'sine');
+    tone(880 * k, 0.09, 0.18, 'sine');
+    if (combo >= 3) tone(1320 * k, 0.16, 0.14, 'sine', 0.07);
+  },
   wrong() { if (!on()) return; tone(220, 0, 0.25, 'triangle', 0.10); },
   tap() { if (!on()) return; tone(500, 0, 0.05, 'sine', 0.05); },
   win() { if (!on()) return; [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.22, 'sine')); },

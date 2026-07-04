@@ -29,7 +29,9 @@
     "Saluturi și III",
     "Recapitulare"
    ],
-   "file": "units/u01.json"
+   "file": "units/u01.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u02",
@@ -57,7 +59,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u02.json"
+   "file": "units/u02.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u03",
@@ -87,7 +91,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u03.json"
+   "file": "units/u03.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u04",
@@ -117,7 +123,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u04.json"
+   "file": "units/u04.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u05",
@@ -142,7 +150,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u05.json"
+   "file": "units/u05.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u06",
@@ -169,7 +179,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u06.json"
+   "file": "units/u06.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u07",
@@ -198,7 +210,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u07.json"
+   "file": "units/u07.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u08",
@@ -228,7 +242,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u08.json"
+   "file": "units/u08.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u09",
@@ -253,7 +269,9 @@
     "Recapitulare: 50 de",
     "Recapitulare"
    ],
-   "file": "units/u09.json"
+   "file": "units/u09.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u10",
@@ -283,7 +301,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u10.json"
+   "file": "units/u10.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u11",
@@ -312,7 +332,9 @@
     "Apeluri II",
     "Recapitulare"
    ],
-   "file": "units/u11.json"
+   "file": "units/u11.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u12",
@@ -338,7 +360,9 @@
     "Mini-arc II",
     "Mini-arc III"
    ],
-   "file": "units/u12.json"
+   "file": "units/u12.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u13",
@@ -365,7 +389,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u13.json"
+   "file": "units/u13.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u14",
@@ -386,7 +412,9 @@
     "Past perfect la muncă",
     "Recapitulare"
    ],
-   "file": "units/u14.json"
+   "file": "units/u14.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u15",
@@ -411,7 +439,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u15.json"
+   "file": "units/u15.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u16",
@@ -434,7 +464,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u16.json"
+   "file": "units/u16.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u17",
@@ -461,7 +493,9 @@
     "Prima zi la I",
     "Prima zi la II"
    ],
-   "file": "units/u17.json"
+   "file": "units/u17.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u18",
@@ -487,7 +521,9 @@
     "Conflict la I",
     "Conflict la II"
    ],
-   "file": "units/u18.json"
+   "file": "units/u18.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u19",
@@ -512,7 +548,9 @@
     "Dentist II",
     "Dentist III"
    ],
-   "file": "units/u19.json"
+   "file": "units/u19.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u20",
@@ -539,7 +577,9 @@
     "Subiecte I",
     "Subiecte II"
    ],
-   "file": "units/u20.json"
+   "file": "units/u20.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u21",
@@ -566,7 +606,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u21.json"
+   "file": "units/u21.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u22",
@@ -596,7 +638,9 @@
     "Recapitulare",
     "Recapitulare"
    ],
-   "file": "units/u22.json"
+   "file": "units/u22.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u23",
@@ -621,7 +665,9 @@
     "Umorul I",
     "Umorul II"
    ],
-   "file": "units/u23.json"
+   "file": "units/u23.json",
+   "dlg": 2,
+   "wr": 2
   },
   {
    "id": "u24",
@@ -647,7 +693,9 @@
     "Vocabular I",
     "Vocabular II"
    ],
-   "file": "units/u24.json"
+   "file": "units/u24.json",
+   "dlg": 2,
+   "wr": 2
   }
  ]
 }

@@ -115,6 +115,29 @@ const ta = async (name, fn) => {
       return exs.length >= 3;
     });
 
+    // ---- dialoguri & scriere ----
+    await ta('all units have valid dialogues + writing', async () => {
+      const m = await C.loadCourse();
+      for (const um of m.units) {
+        const u = await C.loadUnit(um.id);
+        if (um.dlg !== (u.dialogues || []).length) return false;
+        if (um.wr !== (u.writing || []).length) return false;
+        for (const d of (u.dialogues || [])) {
+          if (d.lines.length < 4) return false;
+          if (!d.lines.some(l => l.who === 'me')) return false;
+          for (const l of d.lines) {
+            if (!l.en || !l.ro) return false;
+            if (l.who === 'me' && (!l.wrong || l.wrong.length < 2)) return false;
+            if (l.who !== 'me' && l.who !== 'npc') return false;
+          }
+        }
+        for (const w of (u.writing || [])) {
+          if (!w.prompt || !w.modelEn || !w.minSent) return false;
+        }
+      }
+      return true;
+    });
+
     // ---- gamify ----
     t('hearts lose/regen math', () => {
       const p = S.state.profile;

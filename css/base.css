@@ -331,6 +331,31 @@ button { font-family: inherit; }
   z-index: 950; max-width: 92vw; text-align: center; animation: fadein .2s ease;
 }
 
+/* ---------- dialog (conversație) ---------- */
+.dlg-scene { text-align: center; color: var(--text2); font-size: .95rem; margin: 6px 0 14px; }
+.dlg-chat { display: flex; flex-direction: column; gap: 10px; padding-bottom: 8px; }
+.dlg-line { display: flex; gap: 8px; align-items: flex-end; max-width: 88%; animation: fadein .25s ease; }
+.dlg-line.npc { align-self: flex-start; }
+.dlg-line.me { align-self: flex-end; flex-direction: row-reverse; }
+.dlg-bubble { border-radius: 18px; padding: 11px 14px; font-size: 1.04rem; line-height: 1.35; }
+.dlg-line.npc .dlg-bubble { background: var(--card); border: 2px solid var(--line); border-bottom-left-radius: 6px; }
+.dlg-line.me .dlg-bubble { background: var(--primary); color: var(--on-primary); border-bottom-right-radius: 6px; }
+.dlg-bubble .dlg-ro { display: block; font-size: .85rem; opacity: .8; margin-top: 3px; }
+.dlg-line.me .dlg-bubble .dlg-ro { opacity: .95; } /* pe fundal colorat nu ne permitem să estompăm */
+.dlg-ava { font-size: 1.5rem; flex: none; }
+.dlg-prompt { font-weight: 800; margin: 14px 0 10px; }
+
+/* ---------- atelier de scriere ---------- */
+.wr-prompt { font-size: 1.1rem; font-weight: 700; }
+.wr-req { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.wr-req .chip { cursor: default; min-height: 38px; padding: 6px 12px; font-size: .95rem; }
+.wr-check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.wr-check .wc-i { font-size: 1.2rem; flex: none; }
+.wr-check.ok .wc-i { color: var(--success-text); }
+.wr-check.bad { color: var(--text2); }
+.wr-model { background: var(--success-bg); border: 2px solid var(--success); border-radius: 14px; padding: 14px; margin-top: 12px; }
+.wr-count { text-align: right; color: var(--text2); font-size: .85rem; margin-top: 4px; }
+
 /* mascot bubble */
 .mascot-line { display: flex; align-items: flex-end; gap: 10px; margin: 8px 0 14px; }
 .mascot-line svg { width: 84px; height: 84px; flex: none; }

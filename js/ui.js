@@ -7,8 +7,8 @@ import { TIERS, standings, syncLeague, daysLeftInWeek } from './league.js';
 import { loadCourse, loadUnit, loadStartedUnits, unitProgress } from './course.js';
 import { buildLesson, buildReview, recordAnswer, countDue, norm } from './engine.js';
 import { mountExercise } from './exercises.js';
-import { mascotSvg, CHEERS, SOFT_WRONG, pick } from './mascot.js';
-import { speak, ttsAvailable, sttAvailable, stopSpeaking } from './speech.js';
+import { mascotSvg, CHEERS, SOFT_WRONG, RETRY_SOON, pick } from './mascot.js';
+import { speak, ttsAvailable, sttAvailable, stopSpeaking, listEnVoices, refreshVoice } from './speech.js';
 import { sfx } from './sound.js';
 
 const $app = () => document.getElementById('app');
@@ -102,11 +102,13 @@ function navbar(active) {
 // ---------- navigare ----------
 let currentRoute = 'home';
 let navSeq = 0; // jeton anti-randare-întârziată (ecran vechi peste ecran nou)
+let inActivity = false; // dialog sau atelier de scriere în desfășurare
 
-export function isLessonActive() { return !!lessonState; }
+export function isLessonActive() { return !!lessonState || inActivity; }
 
 export function nav(route, arg) {
   navSeq++;
+  inActivity = false;
   currentRoute = route;
   stopSpeaking();
   // o actualizare a aplicației amânată în timpul lecției se aplică acum
@@ -236,14 +238,19 @@ export function renderOnboarding() {
       body.appendChild(opts);
     } else if (step === 4) {
       body.appendChild(h('h1', '', 'De ce înveți engleza?'));
-      body.appendChild(h('p', 'sub', 'Ca să-ți arătăm progresul care contează pentru tine.'));
+      body.appendChild(h('p', 'sub', 'Poți alege mai multe — îți arătăm progresul care contează pentru tine.'));
+      data.why = Array.isArray(data.why) ? data.why : [];
       const opts = h('div', 'opts');
       [['munca_af', '💼 Pentru muncă', 'Un loc de muncă în străinătate'],
        ['familie', '👨‍👩‍👧 Pentru familie', 'Să fim aproape de copii și nepoți'],
        ['calatorie', '✈️ Pentru călătorii', 'Să mă descurc oriunde'],
        ['minte', '🧠 Pentru mine', 'Minte ageră și o limbă nouă']].forEach(([id, t, d]) => {
-        const b = h('button', 'opt' + (data.why === id ? ' sel' : ''), `<span><b>${t}</b><br><small style="color:var(--text2)">${d}</small></span>`);
-        b.addEventListener('click', () => { data.why = id; opts.querySelectorAll('.opt').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); });
+        const b = h('button', 'opt' + (data.why.includes(id) ? ' sel' : ''), `<span><b>${t}</b><br><small style="color:var(--text2)">${d}</small></span>`);
+        b.addEventListener('click', () => {
+          const i = data.why.indexOf(id);
+          if (i >= 0) { data.why.splice(i, 1); b.classList.remove('sel'); }
+          else { data.why.push(id); b.classList.add('sel'); }
+        });
         opts.appendChild(b);
       });
       body.appendChild(opts);
@@ -259,7 +266,7 @@ export function renderOnboarding() {
     if (step < 5) { step++; renderStep(); return; }
     const p = addProfile(data.name, data.avatar);
     p.theme = data.theme; p.fontScale = data.fontScale; p.track = data.track; p.dailyGoalXp = data.goal;
-    p.why = data.why || 'minte';
+    p.why = (Array.isArray(data.why) && data.why.length) ? data.why : ['minte'];
     save(true);
     applyPrefs();
     nav('home');
@@ -359,6 +366,29 @@ async function renderHome() {
       node.appendChild(b);
       node.appendChild(h('div', 'lesson-label', esc((u.lessonTitles && u.lessonTitles[i]) || `Lecția ${i + 1}`)));
       path.appendChild(node);
+    }
+    // dialog (după jumătate din lecții) și scriere (după toate lecțiile)
+    if (u.dlg > 0) {
+      const dNode = h('div', 'path-node');
+      const dDone = (p.game.units[u.id] && p.game.units[u.id].dlg) || 0;
+      const dUnlocked = !locked && prog.done >= Math.ceil(u.lessonCount / 2);
+      const db = h('button', 'lesson-btn' + (dDone >= u.dlg ? ' done' : !dUnlocked ? ' locked' : ''));
+      db.innerHTML = dDone >= u.dlg ? '💬' : dUnlocked ? '💬' : '🔒';
+      if (dUnlocked) db.addEventListener('click', () => startDialog(u));
+      dNode.appendChild(db);
+      dNode.appendChild(h('div', 'lesson-label', 'Conversație'));
+      path.appendChild(dNode);
+    }
+    if (u.wr > 0) {
+      const wNode = h('div', 'path-node');
+      const wDone = (p.game.units[u.id] && p.game.units[u.id].wr) || 0;
+      const wUnlocked = !locked && prog.done >= u.lessonCount;
+      const wb = h('button', 'lesson-btn' + (wDone >= u.wr ? ' done' : !wUnlocked ? ' locked' : ''));
+      wb.innerHTML = wDone >= u.wr ? '✍️' : wUnlocked ? '✍️' : '🔒';
+      if (wUnlocked) wb.addEventListener('click', () => startWriting(u));
+      wNode.appendChild(wb);
+      wNode.appendChild(h('div', 'lesson-label', 'Scriere'));
+      path.appendChild(wNode);
     }
     // proba unității
     const tnode = h('div', 'path-node');
@@ -586,6 +616,8 @@ function renderExercise() {
       skipAsOkMsg = msg;
       skipBtn.classList.remove('hidden');
     },
+    // răspunsul corect se dezvăluie abia la a doua ratare a ACELUIAȘI exercițiu
+    reveal: (ex._misses || 0) >= 1,
   };
 
   const handle = mountExercise(wrap, ex, ctx);
@@ -626,10 +658,11 @@ function renderExercise() {
       L.right++;
       L.combo++; L.bestCombo = Math.max(L.bestCombo, L.combo);
       if (res.isListen) L.listenRight++;
-      sfx.correct();
+      sfx.correct(L.combo);
     } else {
       L.wrong++;
       L.combo = 0;
+      ex._misses = (ex._misses || 0) + 1;
       sfx.wrong();
       if (!res.noHeart && !L.review) {
         if (!L.freeMistakeUsed) {
@@ -652,9 +685,14 @@ function renderExercise() {
       fb.appendChild(h('div', 'fb-t', '✅ ' + t));
       if (res.almost) fb.appendChild(h('div', 'fb-s', esc(res.correctText)));
       else if (res.correctText && res.userText && norm(res.userText) !== norm(res.correctText)) fb.appendChild(h('div', 'fb-s', esc(res.correctText)));
-    } else {
+    } else if ((ex._misses || 0) >= 2) {
+      // a doua ratare: acum arătăm forma corectă, ca să o aplice la următoarea revenire
       fb.appendChild(h('div', 'fb-t', pick(SOFT_WRONG)));
       fb.appendChild(h('div', 'fb-s', '<b>' + esc(res.correctText) + '</b>'));
+    } else {
+      // prima ratare: fără răspuns — îl cauți singur când exercițiul revine (așa se fixează)
+      fb.appendChild(h('div', 'fb-t', pick(RETRY_SOON)));
+      fb.appendChild(h('div', 'fb-s', L.isTest ? 'Se punctează la final.' : 'Exercițiul revine imediat.'));
     }
     inner.appendChild(fb);
     const cont = h('button', 'btn ' + (res.ok ? 'btn-primary' : 'btn-danger'), 'CONTINUĂ');
@@ -664,13 +702,10 @@ function renderExercise() {
   }
 
   function advance(res) {
-    // greșit → reintroducem exercițiul la coadă (a doua șansă, ca la Duolingo)
+    // greșit → exercițiul revine la coadă până e stăpânit (max 3 încercări)
     if (res && !res.ok && !res.skipped && !L.isTest) {
       const cur = L.exercises[L.i];
-      if (!cur._requeued) {
-        cur._requeued = true;
-        L.exercises.push(cur);
-      }
+      if ((cur._misses || 0) <= 2) L.exercises.push(cur);
     }
     L.i++;
     if (L.i >= L.exercises.length) { finishLesson(); return; }
@@ -696,11 +731,12 @@ function finishLesson() {
   if (L.bestCombo >= 5) base += 3;
   const gained = G.addXp(base, p);
 
-  // rubine (cufăr) — mai des la probă/perfect
+  // rubine — recompense fixe și previzibile: știi mereu pentru ce muncești
   let gems = 0;
   if (L.isTest && acc >= 80) gems = 25;
   else if (perfect) gems = 10;
-  else if (Math.random() < 0.35) gems = 5;
+  else if (L.review) gems = 2;
+  else gems = 3;
   if (gems) G.addGems(gems, p);
 
   // progres unitate
@@ -749,7 +785,7 @@ function finishLesson() {
   if (streakRes.milestone) {
     sc.appendChild(h('p', '', `🎉 <b>${streakRes.milestone} zile la rând!</b> Ai primit un cadou de rubine!`));
   }
-  // mesaj legat de motivul lor real (cercetare: motivația concretă ține adulții în joc)
+  // mesaj legat de motivele lor reale (cercetare: motivația concretă ține adulții în joc)
   if ((testPassed || streakRes.milestone) && p.why) {
     const WHY_MSG = {
       munca_af: 'Încă un pas spre lucrul în engleză. 💼',
@@ -757,7 +793,13 @@ function finishLesson() {
       calatorie: 'Te descurci tot mai bine oriunde. ✈️',
       minte: 'Mintea ta lucrează excelent. 🧠',
     };
-    if (WHY_MSG[p.why]) sc.appendChild(h('p', 'sub', WHY_MSG[p.why]));
+    const whys = Array.isArray(p.why) ? p.why : [p.why];
+    const chosen = whys.filter(w => WHY_MSG[w]);
+    if (chosen.length) {
+      // rotim printre motivele alese, ca mesajul să nu se repete mecanic
+      const msg = WHY_MSG[chosen[p.game.stats.lessons % chosen.length]];
+      sc.appendChild(h('p', 'sub', msg));
+    }
   }
   for (const q of questsDone) {
     sc.appendChild(h('p', '', `🎯 Misiune gata: <b>${esc(q.text)}</b> — revendică din Misiuni!`));
@@ -966,6 +1008,44 @@ function renderProfile() {
   rowF.appendChild(segF);
   set.appendChild(rowF);
 
+  // vocea de engleză (dintre vocile instalate pe telefon, cele mai naturale primele)
+  const enVoices = listEnVoices();
+  if (enVoices.length <= 1) {
+    // vocile se încarcă async — reîncercăm o singură dată dacă utilizatorul e tot aici
+    setTimeout(() => {
+      try {
+        if (currentRoute === 'profile' && listEnVoices().length > 1) renderProfile();
+      } catch (_) {}
+    }, 1500);
+  }
+  if (enVoices.length > 1) {
+    const rowV = h('div', 'set-row');
+    rowV.appendChild(h('div', '', '<div class="set-l">Vocea de engleză</div><div class="set-d">Alege-o pe cea care sună cel mai natural</div>'));
+    const wrapV = h('div', 'row');
+    const sel = h('select', 'name-in');
+    sel.style.marginTop = '0'; sel.style.maxWidth = '46vw'; sel.style.fontSize = '0.95rem'; sel.style.padding = '10px';
+    const auto = h('option', '', 'Automat (recomandat)');
+    auto.value = '';
+    sel.appendChild(auto);
+    enVoices.slice(0, 12).forEach(v => {
+      const o = h('option', '', esc(v.name.replace(/Microsoft |Google |Online \(Natural\) - English \(United Kingdom\)/g, '').trim() || v.name));
+      o.value = v.name;
+      if (p.voiceName === v.name) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => {
+      p.voiceName = sel.value || '';
+      save(true);
+      refreshVoice();
+      speak('Hello! Nice to meet you.');
+    });
+    const test = h('button', 'audio-btn small', '🔊');
+    test.addEventListener('click', () => speak('Hello! How are you today?'));
+    wrapV.appendChild(sel); wrapV.appendChild(test);
+    rowV.appendChild(wrapV);
+    set.appendChild(rowV);
+  }
+
   // sunete
   const rowS = h('div', 'set-row');
   rowS.appendChild(h('div', '', '<div class="set-l">Sunete</div><div class="set-d">Efecte la răspunsuri</div>'));
@@ -1074,6 +1154,354 @@ function renderProfile() {
 
   // despre
   sc.appendChild(h('p', 'sub tc mt16', 'Engleza de la Zero · făcută cu drag pentru voi ❤️'));
+}
+
+// ---------- conversație (dialog ghidat) ----------
+// Reguli din cercetare: ture stricte (aplicația vorbește, tu răspunzi), transcript
+// permanent vizibil, alegerile greșite au CONSECINȚĂ vizibilă (partenerul nu înțelege),
+// verificări de înțelegere țesute în firul poveștii, nu la final.
+const NPC_CONFUSED = [
+  { en: "Sorry, I don't understand.", ro: 'Scuze, nu înțeleg.' },
+  { en: 'Pardon? Could you say that again?', ro: 'Poftim? Poți repeta?' },
+  { en: "I'm not sure what you mean.", ro: 'Nu sunt sigur ce vrei să spui.' },
+];
+
+async function startDialog(unitMeta) {
+  const p = state.profile;
+  const mySeq = navSeq;
+  try {
+    const unit = await loadUnit(unitMeta.id);
+    if (mySeq !== navSeq) return;
+    const list = unit.dialogues || [];
+    if (!list.length) { toast('Dialogul nu e disponibil încă.'); return; }
+    const st = p.game.units[unitMeta.id] || (p.game.units[unitMeta.id] = { done: 0, test: false });
+    const idx = (st.dlg || 0) % list.length;
+    renderDialog(unitMeta, unit, list[idx]);
+  } catch (_) { toast('Dialogul nu s-a putut încărca.'); }
+}
+
+function renderDialog(unitMeta, unit, dlg) {
+  const p = state.profile;
+  inActivity = true;
+  const a = $app();
+  a.innerHTML = '';
+
+  const top = h('div', 'lesson-top');
+  const quit = h('button', 'btn-quit', '✕');
+  quit.addEventListener('click', () => {
+    confirmModal('Ieși din conversație?', 'O poți relua oricând.', 'Ieși', (yes) => { if (yes) nav('home'); }, { noLabel: 'Rămân' });
+  });
+  const prog = h('div', 'prog');
+  const fill = h('div', 'prog-fill');
+  prog.appendChild(fill);
+  top.appendChild(quit); top.appendChild(prog);
+  top.appendChild(h('div', 'lesson-hearts', '💬'));
+  a.appendChild(top);
+
+  const wrap = h('div', 'ex-wrap');
+  wrap.appendChild(h('div', 'ex-title tc', esc(dlg.title)));
+  if (dlg.scene) wrap.appendChild(h('div', 'dlg-scene', esc(dlg.scene)));
+  const chat = h('div', 'dlg-chat');
+  wrap.appendChild(chat);
+  const act = h('div', '');
+  wrap.appendChild(act);
+  a.appendChild(wrap);
+
+  const lines = dlg.lines;
+  const mySeq = navSeq; // orice timer rămas în urmă după ieșire devine inofensiv
+  const accepted = new Set(); // starea "replică acceptată" e locală rulării, nu pe obiectele din cache
+  let i = 0, misses = 0, wrongTotal = 0, meCount = 0;
+
+  function addBubble(who, en, ro, speakIt) {
+    const line = h('div', 'dlg-line ' + who);
+    line.appendChild(h('div', 'dlg-ava', who === 'npc' ? '🧑‍💼' : esc(p.avatar)));
+    const b = h('div', 'dlg-bubble');
+    b.innerHTML = `<b>${esc(en)}</b><span class="dlg-ro">${esc(ro)}</span>`;
+    if (who === 'npc') {
+      const ab = h('button', 'audio-btn small', '🔊');
+      ab.style.marginTop = '6px';
+      ab.addEventListener('click', () => speak(en));
+      b.appendChild(ab);
+    }
+    line.appendChild(b);
+    chat.appendChild(line);
+    if (speakIt) speak(en);
+    wrap.scrollIntoView(false);
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  function step() {
+    if (navSeq !== mySeq) return; // utilizatorul a ieșit — nu mai atingem ecranul
+    fill.style.width = Math.round((i / lines.length) * 100) + '%';
+    act.innerHTML = '';
+    if (i >= lines.length) { finishDialog(); return; }
+    const ln = lines[i];
+    if (ln.who === 'npc') {
+      addBubble('npc', ln.en, ln.ro, true);
+      i++;
+      setTimeout(step, 400);
+      return;
+    }
+    // rândul tău
+    meCount++;
+    misses = 0;
+    const mode = (meCount % 2 === 1) ? 'choice' : 'bank';
+    if (mode === 'choice') mountChoice(ln);
+    else mountBankLine(ln);
+  }
+
+  function npcReact() {
+    const r = NPC_CONFUSED[wrongTotal % NPC_CONFUSED.length];
+    addBubble('npc', r.en, r.ro, true);
+  }
+
+  function acceptLine(ln) {
+    if (accepted.has(i)) return; // anti dublu-tap: replica se acceptă o singură dată
+    accepted.add(i);
+    sfx.correct(1);
+    addBubble('me', ln.en, ln.ro, false);
+    speak(ln.en);
+    i++;
+    setTimeout(step, 500);
+  }
+
+  function mountChoice(ln) {
+    act.innerHTML = '';
+    act.appendChild(h('div', 'dlg-prompt', 'Ce răspunzi?'));
+    const opts = h('div', 'opts');
+    const options = [{ txt: ln.en, ok: true }, ...(ln.wrong || []).map(w => ({ txt: w, ok: false }))]
+      .sort(() => Math.random() - 0.5);
+    options.forEach((o) => {
+      const b = h('button', 'opt', `<span>${esc(o.txt)}</span>`);
+      b.addEventListener('click', () => {
+        if (o.ok) { acceptLine(ln); return; }
+        // consecință vizibilă: partenerul nu înțelege — încearcă din nou
+        b.classList.add('wrong'); b.disabled = true;
+        sfx.wrong(); wrongTotal++; misses++;
+        npcReact();
+        if (misses >= 2) {
+          // după două rateuri, arătăm varianta corectă
+          [...opts.children].forEach((x, xi) => { if (options[xi].ok) x.classList.add('correct'); });
+        }
+      });
+      opts.appendChild(b);
+    });
+    act.appendChild(opts);
+  }
+
+  function mountBankLine(ln) {
+    act.innerHTML = '';
+    let hintShown = false;
+    act.appendChild(h('div', 'dlg-prompt', 'Construiește răspunsul:'));
+    act.appendChild(h('div', 'ex-sub', esc(ln.ro)));
+    const words = ln.en.replace(/[.,!?]/g, '').split(/\s+/).filter(Boolean);
+    const extras = ['the', 'a', 'is', 'not', 'do', 'very'].filter(f => !words.some(w => norm(w) === f)).slice(0, 3);
+    const chips = words.concat(extras).sort(() => Math.random() - 0.5);
+    const ans = h('div', 'bank-answer');
+    const pool = h('div', 'bank-pool');
+    const placed = [];
+    chips.forEach(wd => {
+      const c = h('button', 'chip', esc(wd));
+      c.addEventListener('click', () => {
+        sfx.tap();
+        if (c.parentElement === pool) { pool.removeChild(c); ans.appendChild(c); placed.push(c); }
+        else { ans.removeChild(c); pool.appendChild(c); placed.splice(placed.indexOf(c), 1); }
+        go.disabled = !placed.length;
+      });
+      pool.appendChild(c);
+    });
+    const go = h('button', 'btn btn-primary btn-big mt16', 'SPUNE');
+    go.disabled = true;
+    go.addEventListener('click', () => {
+      const user = placed.map(c => c.textContent).join(' ');
+      if (norm(user) === norm(ln.en)) { acceptLine(ln); return; }
+      sfx.wrong(); wrongTotal++; misses++;
+      npcReact();
+      // golim răspunsul pentru o nouă încercare
+      [...ans.querySelectorAll('.chip')].forEach(c => { ans.removeChild(c); pool.appendChild(c); });
+      placed.length = 0;
+      go.disabled = true;
+      if (misses >= 2 && !hintShown) {
+        hintShown = true;
+        act.appendChild(h('div', 'ex-sub mt8', '💡 <b>' + esc(ln.en) + '</b>'));
+      }
+    });
+    act.appendChild(ans); act.appendChild(pool); act.appendChild(go);
+  }
+
+  function finishDialog() {
+    if (navSeq !== mySeq) return;
+    const st = p.game.units[unitMeta.id] || (p.game.units[unitMeta.id] = { done: 0, test: false });
+    st.dlg = (st.dlg || 0) + 1;
+    const gained = G.addXp(15, p);
+    G.addGems(3, p);
+    p.game.stats.lessons++;
+    const streakRes = G.hitStreakToday(p);
+    G.questEvent({ xp: gained }, p);
+    save(true);
+    const sc = h('div', 'results');
+    a.innerHTML = '';
+    sc.appendChild(h('div', 'big-mascot', mascotSvg('cheer')));
+    sc.appendChild(h('div', 'res-title', 'Conversație reușită! 💬'));
+    const cards = h('div', 'res-cards');
+    cards.appendChild(h('div', 'res-chip xp', `<div class="rc-l">XP</div><div class="rc-v">+${gained}</div>`));
+    cards.appendChild(h('div', 'res-chip gem', `<div class="rc-l">Rubine</div><div class="rc-v">+3</div>`));
+    if (wrongTotal === 0) cards.appendChild(h('div', 'res-chip acc', `<div class="rc-l">Fluent</div><div class="rc-v">100%</div>`));
+    sc.appendChild(cards);
+    if (streakRes.extended) sc.appendChild(h('p', '', `🔥 Seria: <b>${p.game.streak.count} zile</b>`));
+    sc.appendChild(h('p', 'sub', 'Ai purtat o conversație adevărată în engleză. Exact așa se ajunge la fluență.'));
+    const cont = h('button', 'btn btn-primary btn-big mt24', 'CONTINUĂ');
+    cont.addEventListener('click', () => nav('home'));
+    sc.appendChild(cont);
+    a.appendChild(sc);
+    sfx.win();
+  }
+
+  step();
+}
+
+// ---------- atelierul de scriere ----------
+// Cercetare: scrisul e cel mai puternic consolidator de gramatică; feedback întâi
+// indirect (listă de verificare), apoi explicit (model), plus timp de gândire.
+async function startWriting(unitMeta) {
+  const p = state.profile;
+  const mySeq = navSeq;
+  try {
+    const unit = await loadUnit(unitMeta.id);
+    if (mySeq !== navSeq) return;
+    const list = unit.writing || [];
+    if (!list.length) { toast('Tema de scriere nu e disponibilă încă.'); return; }
+    const st = p.game.units[unitMeta.id] || (p.game.units[unitMeta.id] = { done: 0, test: false });
+    const idx = (st.wr || 0) % list.length;
+    renderWriting(unitMeta, unit, list[idx]);
+  } catch (_) { toast('Tema nu s-a putut încărca.'); }
+}
+
+function splitSentences(text) {
+  return String(text || '').split(/[.!?]+/).map(s => s.trim()).filter(s => s.length >= 2);
+}
+
+function renderWriting(unitMeta, unit, task) {
+  const p = state.profile;
+  inActivity = true;
+  const a = $app();
+  a.innerHTML = '';
+
+  const top = h('div', 'lesson-top');
+  const quit = h('button', 'btn-quit', '✕');
+  quit.addEventListener('click', () => {
+    confirmModal('Ieși din atelier?', 'Textul scris se pierde.', 'Ieși', (yes) => { if (yes) nav('home'); }, { danger: true, noLabel: 'Rămân' });
+  });
+  top.appendChild(quit);
+  top.appendChild(h('div', 'grow tc', '<b>✍️ Atelier de scriere</b>'));
+  top.appendChild(h('div', 'lesson-hearts', ''));
+  a.appendChild(top);
+
+  const wrap = h('div', 'ex-wrap');
+  a.appendChild(wrap);
+
+  const card = h('div', 'card');
+  card.appendChild(h('div', 'wr-prompt', esc(task.prompt)));
+  if (task.tips && task.tips.length) {
+    card.appendChild(h('p', 'sub mt8', '💡 ' + task.tips.map(esc).join(' · ')));
+  }
+  if (task.required.length) {
+    const req = h('div', 'wr-req');
+    req.appendChild(h('span', 'sub', 'Folosește:'));
+    task.required.forEach(r => req.appendChild(h('span', 'chip', esc(r))));
+    card.appendChild(req);
+  }
+  wrap.appendChild(card);
+
+  const ta = h('textarea', 'type-in');
+  ta.style.minHeight = '160px';
+  ta.placeholder = 'Scrie aici în engleză... nu te grăbi.';
+  ta.autocapitalize = 'sentences'; ta.spellcheck = false;
+  wrap.appendChild(ta);
+  const count = h('div', 'wr-count', '0 propoziții');
+  wrap.appendChild(count);
+  ta.addEventListener('input', () => {
+    const n = splitSentences(ta.value).length;
+    count.textContent = `${n} ${n === 1 ? 'propoziție' : 'propoziții'} (țintă: ${task.minSent})`;
+    checkB.disabled = norm(ta.value).length < 10;
+  });
+  if (task.starters && task.starters.length) {
+    const st = h('div', 'wr-req');
+    st.appendChild(h('span', 'sub', 'Începe cu:'));
+    task.starters.forEach(s => {
+      const c = h('button', 'chip', esc(s));
+      c.addEventListener('click', () => { ta.value = (ta.value ? ta.value.trimEnd() + ' ' : '') + s + ' '; ta.focus(); ta.dispatchEvent(new Event('input')); });
+      st.appendChild(c);
+    });
+    wrap.appendChild(st);
+  }
+
+  const result = h('div', '');
+  wrap.appendChild(result);
+
+  const checkB = h('button', 'btn btn-primary btn-big mt16', 'VERIFICĂ CE AI SCRIS');
+  checkB.disabled = true;
+  checkB.addEventListener('click', () => {
+    const text = ta.value;
+    const sents = splitSentences(text);
+    const checks = [];
+    checks.push({ ok: sents.length >= task.minSent, t: `Cel puțin ${task.minSent} propoziții`, d: `ai ${sents.length}` });
+    for (const r of task.required) {
+      checks.push({ ok: norm(text).includes(norm(r)), t: `Ai folosit „${r}”`, d: '' });
+    }
+    checks.push({ ok: /^[A-Z"]/.test(text.trim()), t: 'Prima literă e mare', d: '' });
+    checks.push({ ok: /[.!?]\s*$/.test(text.trim()), t: 'Se termină cu punct', d: '' });
+    // capcanele unității: dacă textul conține o formă-capcană cunoscută, semnalăm
+    for (const tr of (unit.traps || []).slice(0, 30)) {
+      if (tr.wrong && norm(text).includes(norm(tr.wrong))) {
+        checks.push({ ok: false, t: `Atenție la capcană: „${tr.wrong}”`, d: tr.why || '' });
+      }
+    }
+    result.innerHTML = '';
+    const rc = h('div', 'card');
+    rc.appendChild(h('b', '', 'Verificare:'));
+    let allOk = true;
+    for (const c of checks) {
+      if (!c.ok) allOk = false;
+      const row = h('div', 'wr-check' + (c.ok ? ' ok' : ' bad'));
+      row.innerHTML = `<span class="wc-i">${c.ok ? '✅' : '◻️'}</span><span>${esc(c.t)}${c.d ? ` <small>(${esc(c.d)})</small>` : ''}</span>`;
+      rc.appendChild(row);
+    }
+    result.appendChild(rc);
+
+    const doneB = h('button', 'btn btn-primary btn-big mt8', allOk ? 'TRIMITE ✅' : 'TRIMITE AȘA CUM E');
+    doneB.addEventListener('click', () => {
+      // feedback explicit abia acum: modelul de răspuns, pentru comparație
+      result.innerHTML = '';
+      const model = h('div', 'wr-model');
+      model.innerHTML = `<b>Un model de răspuns:</b><br>${esc(task.modelEn)}<br><small style="color:var(--text2)">${esc(task.modelRo)}</small>`;
+      result.appendChild(model);
+      result.appendChild(h('p', 'sub mt8', 'Compară cu ce ai scris tu. Ce ai spune altfel data viitoare?'));
+      const fin = h('button', 'btn btn-primary btn-big mt8', 'AM COMPARAT — GATA');
+      fin.addEventListener('click', () => {
+        if (fin.disabled) return;
+        fin.disabled = true;
+        const st2 = p.game.units[unitMeta.id] || (p.game.units[unitMeta.id] = { done: 0, test: false });
+        st2.wr = (st2.wr || 0) + 1;
+        if (!p.game.writings) p.game.writings = {};
+        p.game.writings[unitMeta.id + '_' + task.id] = { t: ta.value.slice(0, 1200), when: todayStr() };
+        const gained = G.addXp(15, p);
+        G.addGems(3, p);
+        p.game.stats.lessons++;
+        G.hitStreakToday(p);
+        G.questEvent({ xp: gained }, p);
+        save(true);
+        toast(`+${gained} XP pentru scriere! ✍️`);
+        nav('home');
+      });
+      result.appendChild(fin);
+      doneB.remove(); checkB.remove();
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    result.appendChild(doneB);
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+  wrap.appendChild(checkB);
 }
 
 // ---------- instalare pe telefon ----------
