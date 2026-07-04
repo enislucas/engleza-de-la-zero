@@ -27,6 +27,7 @@ async function boot() {
   loadCourse().catch(() => {});
   window.__appStarted = true;
   startApp();
+  syncBadge();
   const splash = document.getElementById('splash');
   if (splash) { splash.classList.add('hide'); setTimeout(() => splash.remove(), 500); }
   registerSW();
@@ -44,9 +45,20 @@ window.addEventListener('storage', (e) => {
   } catch (_) {}
 });
 
+// Bulină pe iconița aplicației cât timp lecția zilei nu e făcută (fără notificări, fără sâcâială).
+function syncBadge() {
+  try {
+    const p = state.profile;
+    if (!p || !navigator.setAppBadge) return;
+    if (p.game.streak.lastDay !== todayStr()) navigator.setAppBadge(1);
+    else if (navigator.clearAppBadge) navigator.clearAppBadge();
+  } catch (_) {}
+}
+
 // La revenirea în aplicație (a doua zi): resincronizăm seria/misiunile.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !state.profile) return;
+  syncBadge();
   const today = todayStr();
   if (today !== lastDay) {
     lastDay = today;

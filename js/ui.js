@@ -1798,14 +1798,16 @@ export function startApp() {
   G.syncQuests(p);
   syncLeague(p);
   if (ev.frozenUsed) toast('❄️ Un înghețător ți-a salvat seria!', 3500);
-  if (ev.lost && G.canRepairStreak(p)) {
+  if (ev.lost) {
+    // Cald, nu vinovat: întoarcerea e victoria. Reparația se oferă doar dacă chiar se poate.
     setTimeout(() => {
-      confirmModal('Seria s-a întrerupt 😔', `Seria ta de ${p.game.streak.lostStreak} zile s-a pierdut ieri. O poți repara cu 💎 ${G.COSTS.repair} rubine (ai ${p.game.gems}).`, `Repară-o (💎 ${G.COSTS.repair})`, (yes) => {
-        if (yes) {
-          if (G.repairStreak(p)) { sfx.streak(); toast('Seria a fost reparată! 🔥'); nav('home'); }
-          else toast('Nu ai destule rubine. 😕');
-        }
-      }, { noLabel: 'Încep alta' });
+      if (G.canRepairStreak(p) && p.game.gems >= G.COSTS.repair) {
+        confirmModal('Bine ai revenit! 👋', `Contează că ești aici. Dacă vrei, seria ta de ${p.game.streak.lostStreak} zile poate continua de unde a rămas — sau începem alta chiar azi, cu prima lecție.`, `Continuă seria (💎 ${G.COSTS.repair})`, (yes) => {
+          if (yes && G.repairStreak(p)) { sfx.streak(); toast('Seria continuă! 🔥'); nav('home'); }
+        }, { noLabel: 'Încep alta azi' });
+      } else {
+        toast('Bine ai revenit! O lecție azi și seria pornește din nou. 💪', 4000);
+      }
     }, 800);
   }
   nav('home');

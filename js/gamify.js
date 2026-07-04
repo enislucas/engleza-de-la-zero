@@ -154,7 +154,13 @@ export function hitStreakToday(p = state.profile) {
   if (s.travel) { s.travel = false; s.travelStart = ''; } // o lecție reia automat seria
   res.extended = true;
   const MILE = { 3: 30, 7: 50, 14: 80, 30: 200, 50: 300, 100: 500, 200: 800, 365: 2000 };
-  if (MILE[s.count]) { res.milestone = s.count; addGems(MILE[s.count], p); }
+  if (MILE[s.count]) {
+    res.milestone = s.count;
+    addGems(MILE[s.count], p);
+    if (s.freezes < 2) s.freezes++; // la fiecare bornă primești și un înghețător gratuit
+  }
+  // ziua e bifată — stingem bulina de pe iconița aplicației
+  try { if (navigator.clearAppBadge) navigator.clearAppBadge(); } catch (_) {}
   save(true);
   return res;
 }
