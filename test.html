@@ -63,13 +63,36 @@ const ta = async (name, fn) => {
     });
 
     // ---- course + lesson build ----
-    await ta('loadCourse', async () => { const m = await C.loadCourse(); return m.units.length >= 1; });
-    await ta('loadUnit u01', async () => { const u = await C.loadUnit('u01'); return u.vocab.length >= 15 && u.lessons.length === 4; });
+    await ta('loadCourse', async () => { const m = await C.loadCourse(); return m.units.length >= 20; });
+    await ta('loadUnit u01', async () => { const u = await C.loadUnit('u01'); return u.vocab.length >= 50 && u.lessons.length >= 8; });
+    await ta('all units load + are sane', async () => {
+      const m = await C.loadCourse();
+      for (const um of m.units) {
+        const u = await C.loadUnit(um.id);
+        if (!u.vocab.length || !u.lessons.length) return false;
+        if (um.lessonCount !== u.lessons.length) return false;
+        // fiecare lecție referă cuvinte/propoziții existente
+        const vids = new Set(u.vocab.map(v => v.id));
+        const sids = new Set(u.sentences.map(s => s.id));
+        for (const l of u.lessons) {
+          for (const id of (l.vocab || [])) if (!vids.has(id)) return false;
+          for (const id of (l.sentences || [])) if (!sids.has(id)) return false;
+        }
+      }
+      return true;
+    });
     await ta('buildLesson has intro + drills', async () => {
       const u = await C.loadUnit('u01');
-      const exs = E.buildLesson(u, u.lessons[0], { canListen: true, canSpeak: true, unit: u });
-      if (exs.length < 5 || exs.length > 12) return false;
+      const withVocab = u.lessons.find(l => (l.vocab || []).length >= 4);
+      const exs = E.buildLesson(u, withVocab, { canListen: true, canSpeak: true, unit: u });
+      if (exs.length < 4 || exs.length > 12) return false;
       if (!exs.some(x => x.type === 'wordcard')) return false;
+      // și o lecție fără vocabular nou (recap) trebuie să producă exerciții
+      const noVocab = u.lessons.find(l => !(l.vocab || []).length);
+      if (noVocab) {
+        const exs2 = E.buildLesson(u, noVocab, { canListen: true, unit: u });
+        if (exs2.length < 2) return false;
+      }
       // opțiunile MCQ nu au duplicate
       for (const x of exs) {
         if (x.opts4) {
