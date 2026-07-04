@@ -278,6 +278,45 @@ const ta = async (name, fn) => {
       return true;
     });
 
+    // ---- măturare completă: TOATE cele 360 de lecții construite și "rezolvate" ----
+    await ta('full course sweep: every lesson playable', async () => {
+      const m = await C.loadCourse();
+      let built = 0, answered = 0;
+      for (const um of m.units) {
+        const u = await C.loadUnit(um.id);
+        for (const spec of u.lessons) {
+          const exs = E.buildLesson(u, spec, { canListen: true, canSpeak: false, unit: u });
+          if (!exs.length) return false;
+          built++;
+          for (const ex of exs) {
+            // simulăm răspunsuri: ~85% corecte
+            const ok = (answered % 7) !== 3;
+            for (const wid of (ex.word ? [ex.word.id] : (ex.sentence && ex.sentence.words) || [])) {
+              E.recordAnswer(wid, ok);
+            }
+            answered++;
+          }
+        }
+        // și proba unității se poate construi
+        const test = E.buildLesson(u, {
+          vocab: u.lessons.flatMap(l => l.vocab || []),
+          sentences: u.lessons.flatMap(l => l.sentences || []),
+          grammar: (u.grammar[0] || {}).id,
+        }, { test: true, canListen: true, unit: u });
+        if (test.length < 6) return false;
+      }
+      if (built !== 360) return false;
+      // după tot cursul, cuvintele chiar se întăresc
+      const words = Object.values(S.state.profile.game.words);
+      const strong = words.filter(w => w.s >= 2).length;
+      if (words.length < 1200 || strong / words.length < 0.5) return false;
+      // și exersarea funcționează în orice moment
+      const datas = [];
+      for (const um of m.units.slice(0, 6)) datas.push(await C.loadUnit(um.id));
+      const rev = E.buildReview(datas, { canListen: true, focusBooks: [8, 11] });
+      return rev.length >= 3;
+    });
+
     // ---- ui start smoke ----
     await ta('ui module loads + startApp does not throw', async () => {
       const app = document.createElement('div'); app.id = 'app'; document.body.appendChild(app);
