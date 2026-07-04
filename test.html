@@ -246,6 +246,38 @@ const ta = async (name, fn) => {
       return true;
     });
 
+    // ---- banca de jetoane: click + drag simulat cu PointerEvent real ----
+    await ta('chip bank: drag never blocks chips', async () => {
+      const wrap = document.createElement('div'); document.body.appendChild(wrap);
+      const ans = document.createElement('div'); ans.className = 'bank-answer';
+      const pool = document.createElement('div'); pool.className = 'bank-pool';
+      wrap.appendChild(ans); wrap.appendChild(pool);
+      const bank = X.buildChipBank(ans, pool, ['I', 'am', '50'], () => {});
+      [...pool.querySelectorAll('.chip')].forEach(c => c.click());
+      if (bank.count() !== 3 || bank.words().join(' ') !== 'I am 50') return false;
+      // ghost-urile rămân pe loc în rezervă
+      if (pool.querySelectorAll('.chip.used').length !== 3) return false;
+      const chips = [...ans.querySelectorAll('.chip')];
+      const c = chips[2];
+      const fire = (el, type, x, y) => el.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, pointerId: 7, bubbles: true, cancelable: true }));
+      const r = c.getBoundingClientRect();
+      fire(c, 'pointerdown', r.x + 5, r.y + 5);
+      fire(c, 'pointermove', r.x + 40, r.y + 6); // depășește pragul → mod tragere
+      const r0 = chips[0].getBoundingClientRect();
+      fire(c, 'pointermove', r0.x + 4, r0.y + 4); // peste primul jeton → reordonare
+      fire(c, 'pointerup', r0.x + 4, r0.y + 4);
+      // jetonul NU are voie să rămână blocat după tragere
+      if (getComputedStyle(c).pointerEvents === 'none') return false;
+      if (c.classList.contains('dragging')) return false;
+      if (bank.words().length !== 3) return false;
+      await new Promise(res => setTimeout(res, 160)); // expiră protecția anti-click-după-tragere
+      c.click(); // încă e funcțional: click îl scoate din răspuns
+      if (bank.count() !== 2) return false;
+      if (pool.querySelectorAll('.chip.used').length !== 2) return false;
+      wrap.remove();
+      return true;
+    });
+
     // ---- ui start smoke ----
     await ta('ui module loads + startApp does not throw', async () => {
       const app = document.createElement('div'); app.id = 'app'; document.body.appendChild(app);

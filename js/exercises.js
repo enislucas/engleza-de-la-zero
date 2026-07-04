@@ -45,12 +45,15 @@ export function buildChipBank(ansEl, poolEl, chips, onChange) {
       if (!c._dragMoved && Math.hypot(e.clientX - c._sx, e.clientY - c._sy) > 10) {
         c._dragMoved = true;
         c.classList.add('dragging');
-        c.style.pointerEvents = 'none'; // ca elementFromPoint să vadă ce e SUB deget
+        // ATENȚIE: nu punem pointer-events:none pe jetonul tras — în Chrome asta
+        // taie chiar evenimentele capturate (pointerup nu mai vine) și jetonul rămâne blocat.
       }
       if (!c._dragMoved) return;
       e.preventDefault();
       const under = document.elementFromPoint(e.clientX, e.clientY);
       const over = under && under.closest ? under.closest('.chip') : null;
+      // dacă degetul e chiar peste jetonul tras, nu facem nimic; când trece peste un
+      // vecin din rândul de răspuns, îl reașezăm acolo
       if (over && over !== c && over.parentElement === ansEl) {
         const r = over.getBoundingClientRect();
         const before = e.clientX < r.left + r.width / 2;
@@ -60,7 +63,6 @@ export function buildChipBank(ansEl, poolEl, chips, onChange) {
     const finish = () => {
       // curățăm ÎNTOTDEAUNA starea propriului jeton — indiferent ce fac alte degete
       if (c._dragActive) {
-        c.style.pointerEvents = '';
         c.classList.remove('dragging');
         if (c._dragMoved) {
           c._dragJust = true; // clickul de după tragere nu trebuie să scoată jetonul
@@ -73,6 +75,8 @@ export function buildChipBank(ansEl, poolEl, chips, onChange) {
     };
     c.addEventListener('pointerup', finish);
     c.addEventListener('pointercancel', finish);
+    // plasă de siguranță: orice pierdere a capturii curăță starea (nimic nu rămâne blocat)
+    c.addEventListener('lostpointercapture', finish);
   }
 
   chips.forEach((word) => {
