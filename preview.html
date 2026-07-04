@@ -37,7 +37,20 @@ try { localStorage.removeItem('ezr_v1'); } catch (_) {}
 initSpeech();
 applyPrefs();
 nav(screen);
-setTimeout(() => { document.title = 'PREVIEW-READY'; }, 1200);
+setTimeout(() => {
+  document.title = 'PREVIEW-READY';
+  if (q.get('debug')) {
+    const vw = document.documentElement.clientWidth;
+    const wide = [];
+    document.querySelectorAll('*').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width > vw + 1 || r.right > vw + 1) {
+        wide.push(`${el.tagName}.${String(el.className).slice(0,30)} w=${Math.round(r.width)} right=${Math.round(r.right)}`);
+      }
+    });
+    fetch('/__testresult__/' + encodeURIComponent(`vw=${vw} scrollW=${document.body.scrollWidth} || ` + wide.slice(0, 12).join(' || '))).catch(() => {});
+  }
+}, 1500);
 </script>
 </body>
 </html>

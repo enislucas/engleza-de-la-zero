@@ -236,6 +236,7 @@ function avgStrength(sentence, p, unit) {
 
 // transformă un exemplu de gramatică în "alege cuvântul lipsă"
 function makeBlank(ex, unit) {
+  if (ex.en.includes('→')) return null; // exemplele-transformare rămân doar în Ghid
   const words = ex.en.replace(/[.,!?]/g, '').split(/\s+/);
   if (words.length < 3) return null;
   // alegem un cuvânt funcțional interesant (am/is/are/do/does/did/will/have/has...)
