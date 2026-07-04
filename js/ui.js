@@ -6,7 +6,7 @@ import * as G from './gamify.js';
 import { TIERS, standings, syncLeague, daysLeftInWeek } from './league.js';
 import { loadCourse, loadUnit, loadStartedUnits, unitProgress } from './course.js';
 import { buildLesson, buildReview, recordAnswer, countDue, norm } from './engine.js';
-import { mountExercise } from './exercises.js';
+import { mountExercise, buildChipBank } from './exercises.js';
 import { mascotSvg, CHEERS, SOFT_WRONG, RETRY_SOON, pick } from './mascot.js';
 import { speak, ttsAvailable, sttAvailable, stopSpeaking, listEnVoices, refreshVoice } from './speech.js';
 import { sfx } from './sound.js';
@@ -225,12 +225,12 @@ export function renderOnboarding() {
       body.appendChild(seg);
     } else if (step === 3) {
       body.appendChild(h('div', 'big-mascot', mascotSvg('teach')));
-      body.appendChild(h('h1', '', 'Ce te interesează mai mult?'));
-      body.appendChild(h('p', 'sub', 'Pe lângă lecțiile de bază, primești cuvinte în plus din domeniul tău.'));
+      body.appendChild(h('h1', '', 'Pentru ce te pregătești?'));
+      body.appendChild(h('p', 'sub', 'La exersare, primești mai des cuvintele care contează pentru tine.'));
       const opts = h('div', 'opts');
-      [['general', '🌍 Engleză generală', 'Pentru viața de zi cu zi'],
-       ['sanatate', '💊 Sănătate și farmacie', 'Pentru lucrul în domeniul medical'],
-       ['munca', '🛃 Muncă, acte și securitate', 'Pentru lucru și instituții']].forEach(([id, t, d]) => {
+      [['general', '🌍 Engleză pentru orice', 'Un pic din toate, echilibrat'],
+       ['viata', '🧳 Viața în altă țară', 'Acte, chirie, doctor, cumpărături, transport'],
+       ['munca', '🔧 Muncă în străinătate', 'Depozit, hotel, curățenie, șantier, birou']].forEach(([id, t, d]) => {
         const b = h('button', 'opt' + (data.track === id ? ' sel' : ''), `<span><b>${t}</b><br><small style="color:var(--text2)">${d}</small></span>`);
         b.addEventListener('click', () => { data.track = id; opts.querySelectorAll('.opt').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); });
         opts.appendChild(b);
@@ -481,8 +481,9 @@ function showHeartsModal() {
     });
     body.appendChild(bf);
   } else {
-    body.appendChild(h('p', 'sub tc', 'Ai toate viețile. Greșelile din lecții costă câte o viață — dar prima greșeală pe zi e gratuită.'));
+    body.appendChild(h('p', 'sub tc', 'Ai toate viețile. Greșelile din lecții costă câte o viață — dar prima greșeală din fiecare lecție e gratuită.'));
   }
+  body.appendChild(h('p', 'sub tc mt8', '🕒 Viețile se refac singure: una la 3 ore. Exersarea îți dă mereu una înapoi.'));
   const back = modal('Vieți', body);
 }
 
@@ -556,7 +557,8 @@ async function startReview() {
     const datas = await loadStartedUnits(p);
     if (mySeq !== navSeq) return;
     if (!datas.length) { toast('Termină întâi prima lecție. 🙂'); return; }
-    const exercises = buildReview(datas, { canListen: ttsAvailable() });
+    const FOCUS = { viata: [8, 11, 12, 19], sanatate: [8, 11, 12, 19], munca: [7, 15, 17, 18] };
+    const exercises = buildReview(datas, { canListen: ttsAvailable(), focusBooks: FOCUS[p.track] || [] });
     if (!exercises.length) { toast('Nu ai încă ce exersa — mai fă o lecție!'); return; }
     lessonState = {
       unitMeta: null, unit: null, lessonIdx: -1, isTest: false, redo: false, review: true,
@@ -840,6 +842,21 @@ async function renderPractice() {
   c1.appendChild(b1);
   sc.appendChild(c1);
 
+  // jocuri arcade — repetare deghizată în distracție
+  const g1 = h('div', 'card row');
+  g1.innerHTML = `<span style="font-size:2rem">⚡</span><div class="grow"><b>Blitz — 60 de secunde</b><div class="set-d">Câte cuvinte recunoști contra cronometru?${p.game.stats.blitzBest ? ` Record: <b>${p.game.stats.blitzBest}</b>` : ''}</div></div>`;
+  const gb1 = h('button', 'btn btn-primary q-claim', 'JOACĂ');
+  gb1.addEventListener('click', startBlitz);
+  g1.appendChild(gb1);
+  sc.appendChild(g1);
+
+  const g2 = h('div', 'card row');
+  g2.innerHTML = `<span style="font-size:2rem">🧩</span><div class="grow"><b>Perechi</b><div class="set-d">Găsește cuvântul și sensul lui — din memorie</div></div>`;
+  const gb2 = h('button', 'btn btn-primary q-claim', 'JOACĂ');
+  gb2.addEventListener('click', startMemory);
+  g2.appendChild(gb2);
+  sc.appendChild(g2);
+
   const words = Object.values(p.game.words);
   const learned = words.filter(w => w.s >= 3).length;
   const inProgress = words.filter(w => w.s > 0 && w.s < 3).length;
@@ -851,6 +868,238 @@ async function renderPractice() {
       <div><div style="font-size:1.5rem;font-weight:800;color:var(--accent-text)">${p.game.stats.lessons}</div><div class="set-d">lecții făcute</div></div>
     </div>`;
   sc.appendChild(c2);
+}
+
+// ---------- jocuri arcade ----------
+// cuvintele deja învățate, în joc contra cronometru — repetare deghizată în distracție
+function learnedPool(datas, minSeen = 1) {
+  const p = state.profile;
+  const pool = [];
+  for (const u of datas) {
+    for (const v of u.vocab) {
+      const w = p.game.words[v.id];
+      if (w && w.seen >= minSeen) pool.push(v);
+    }
+  }
+  return pool;
+}
+
+function pickOthers(pool, word, n) {
+  const out = [];
+  const seen = new Set([norm(word.ro), norm(word.en)]);
+  const shuffled = pool.slice().sort(() => Math.random() - 0.5);
+  for (const c of shuffled) {
+    if (out.length >= n) break;
+    if (c.id === word.id || seen.has(norm(c.ro)) || seen.has(norm(c.en))) continue;
+    seen.add(norm(c.ro)); seen.add(norm(c.en));
+    out.push(c);
+  }
+  // completare relaxată: mai bine 4 variante cu sensuri apropiate decât doar 2 butoane
+  if (out.length < n) {
+    for (const c of shuffled) {
+      if (out.length >= n) break;
+      if (c.id === word.id || out.includes(c)) continue;
+      if (norm(c.ro) === norm(word.ro) || norm(c.en) === norm(word.en)) continue;
+      out.push(c);
+    }
+  }
+  return out;
+}
+
+async function startBlitz() {
+  const p = state.profile;
+  const mySeq = ++navSeq; // omoară orice joc/timer rămas din spate (și dublu-tap pe JOACĂ)
+  let pool;
+  try {
+    pool = learnedPool(await loadStartedUnits(p));
+  } catch (_) { toast('Nu s-a putut încărca.'); return; }
+  if (mySeq !== navSeq) return;
+  if (pool.length < 8) { toast('Mai învață câteva cuvinte întâi — jocul folosește ce știi deja. 🙂'); return; }
+  inActivity = true; // o actualizare a aplicației nu are voie să întrerupă jocul
+  const scored = new Set(); // SRS-ul se atinge o singură dată per cuvânt per joc
+
+  const a = $app();
+  a.innerHTML = '';
+  const wrap = h('div', 'screen');
+  a.appendChild(wrap);
+  const top = h('div', 'blitz-top');
+  const quit = h('button', 'btn-quit', '✕');
+  const timerEl = h('div', 'blitz-timer', '60');
+  const scoreEl = h('div', 'blitz-score', '⚡ 0');
+  top.appendChild(quit); top.appendChild(timerEl); top.appendChild(scoreEl);
+  wrap.appendChild(top);
+  const qArea = h('div', '');
+  wrap.appendChild(qArea);
+
+  let left = 60, score = 0, wrong = 0, over = false;
+  const iv = setInterval(() => {
+    if (navSeq !== mySeq) { clearInterval(iv); return; }
+    left--;
+    timerEl.textContent = String(left);
+    if (left <= 10) timerEl.classList.add('low');
+    if (left <= 0) { clearInterval(iv); endGame(); }
+  }, 1000);
+  quit.addEventListener('click', () => { over = true; clearInterval(iv); nav('practice'); });
+
+  function nextQ() {
+    if (over || navSeq !== mySeq) return;
+    qArea.innerHTML = '';
+    // preferăm cuvinte neîntrebate încă în acest joc
+    const fresh = pool.filter(x => !scored.has(x.id));
+    const src = fresh.length >= 4 ? fresh : pool;
+    const w = src[Math.floor(Math.random() * src.length)];
+    const dir = Math.random() < 0.5;
+    qArea.appendChild(h('div', 'blitz-word', esc(dir ? w.en : w.ro)));
+    const opts = h('div', 'opts');
+    const options = [w, ...pickOthers(pool, w, 3)].sort(() => Math.random() - 0.5);
+    let locked = false;
+    options.forEach((o) => {
+      const b = h('button', 'opt', `<span>${esc(dir ? o.ro : o.en)}</span>`);
+      b.addEventListener('click', () => {
+        if (locked || over) return;
+        locked = true;
+        const ok = o.id === w.id;
+        b.classList.add(ok ? 'correct' : 'wrong');
+        if (!scored.has(w.id)) {
+          scored.add(w.id);
+          try { recordAnswer(w.id, ok); } catch (_) {}
+        }
+        if (ok) { score++; scoreEl.textContent = '⚡ ' + score; sfx.correct(Math.min(score, 8)); }
+        else { wrong++; sfx.wrong(); [...opts.children].forEach((x, xi) => { if (options[xi].id === w.id) x.classList.add('correct'); }); }
+        setTimeout(nextQ, ok ? 250 : 700);
+      });
+      opts.appendChild(b);
+    });
+    qArea.appendChild(opts);
+  }
+
+  function endGame() {
+    if (over || navSeq !== mySeq) return;
+    over = true;
+    const best = Math.max(score, p.game.stats.blitzBest || 0);
+    const isRecord = score > 0 && score >= best && score > (p.game.stats.blitzBest || 0);
+    p.game.stats.blitzBest = best;
+    const gained = G.addXp(Math.min(score, 20), p);
+    const gems = score >= 15 ? 6 : score >= 8 ? 4 : 2;
+    G.addGems(gems, p);
+    G.hitStreakToday(p);
+    G.questEvent({ xp: gained, review: 1 }, p);
+    save(true);
+    a.innerHTML = '';
+    const sc = h('div', 'results');
+    sc.appendChild(h('div', 'big-mascot', mascotSvg(score >= 10 ? 'cheer' : 'happy')));
+    sc.appendChild(h('div', 'res-title', isRecord ? '🏅 RECORD NOU!' : 'Timpul a expirat!'));
+    const cards = h('div', 'res-cards');
+    cards.appendChild(h('div', 'res-chip acc', `<div class="rc-l">Corecte</div><div class="rc-v">${score}</div>`));
+    cards.appendChild(h('div', 'res-chip xp', `<div class="rc-l">XP</div><div class="rc-v">+${gained}</div>`));
+    cards.appendChild(h('div', 'res-chip gem', `<div class="rc-l">Rubine</div><div class="rc-v">+${gems}</div>`));
+    sc.appendChild(cards);
+    sc.appendChild(h('p', 'sub', `Recordul tău: <b>${best}</b>. ${score >= best ? 'Îl poți depăși mâine!' : 'Mai încearcă o dată?'}`));
+    const again = h('button', 'btn btn-primary btn-big mt16', '⚡ ÎNCĂ O DATĂ');
+    again.addEventListener('click', () => startBlitz());
+    const out = h('button', 'btn btn-big mt8', 'Înapoi');
+    out.addEventListener('click', () => nav('practice'));
+    sc.appendChild(again); sc.appendChild(out);
+    a.appendChild(sc);
+    sfx.win();
+  }
+
+  nextQ();
+}
+
+async function startMemory() {
+  const p = state.profile;
+  const mySeq = ++navSeq; // omoară orice joc rămas din spate + dublu-tap
+  let pool;
+  try {
+    pool = learnedPool(await loadStartedUnits(p));
+  } catch (_) { toast('Nu s-a putut încărca.'); return; }
+  if (mySeq !== navSeq) return;
+  if (pool.length < 6) { toast('Mai învață câteva cuvinte întâi. 🙂'); return; }
+  inActivity = true;
+
+  // 6 perechi: cele mai slabe cuvinte primele (repetare utilă, nu doar joc)
+  const weak = pool.slice().sort((x, y) => {
+    const wx = p.game.words[x.id], wy = p.game.words[y.id];
+    return (wx ? wx.s : 9) - (wy ? wy.s : 9);
+  }).slice(0, 12);
+  const six = weak.sort(() => Math.random() - 0.5).slice(0, 6);
+  const cards = six.flatMap(w => [{ wid: w.id, txt: w.en, k: 'en' }, { wid: w.id, txt: w.ro, k: 'ro' }])
+    .sort(() => Math.random() - 0.5);
+
+  const a = $app();
+  a.innerHTML = '';
+  const wrap = h('div', 'screen');
+  a.appendChild(wrap);
+  const top = h('div', 'blitz-top');
+  const quit = h('button', 'btn-quit', '✕');
+  const movesEl = h('div', 'blitz-score', '🧩 0 mutări');
+  top.appendChild(quit); top.appendChild(h('div', 'h2', 'Perechi')); top.appendChild(movesEl);
+  wrap.appendChild(top);
+  wrap.appendChild(h('p', 'sub tc', 'Găsește perechea: cuvântul englez și sensul lui.'));
+  quit.addEventListener('click', () => nav('practice'));
+
+  const grid = h('div', 'mem-grid');
+  wrap.appendChild(grid);
+  let openCard = null, lock = false, moves = 0, matched = 0;
+
+  cards.forEach((c) => {
+    const b = h('button', 'mem-card hidden-face', '❓');
+    b.addEventListener('click', () => {
+      if (lock || b === openCard || b.classList.contains('matched') || navSeq !== mySeq) return;
+      sfx.tap();
+      b.classList.remove('hidden-face');
+      b.textContent = c.txt;
+      if (c.k === 'en') speak(c.txt);
+      if (!openCard) { openCard = b; openCard._c = c; return; }
+      moves++;
+      movesEl.textContent = '🧩 ' + moves + ' mutări';
+      const oc = openCard._c;
+      const ob = openCard;
+      openCard = null;
+      if (oc.wid === c.wid && oc.k !== c.k) {
+        b.classList.add('matched'); ob.classList.add('matched');
+        matched++; sfx.correct(matched);
+        try { recordAnswer(c.wid, true); } catch (_) {}
+        if (matched === 6) setTimeout(endGame, 500);
+      } else {
+        lock = true;
+        b.classList.add('wrongpair'); ob.classList.add('wrongpair');
+        sfx.wrong();
+        setTimeout(() => {
+          [b, ob].forEach(x => { x.classList.remove('wrongpair'); x.classList.add('hidden-face'); x.textContent = '❓'; });
+          lock = false;
+        }, 750);
+      }
+    });
+    grid.appendChild(b);
+  });
+
+  function endGame() {
+    if (navSeq !== mySeq) return;
+    const stars = moves <= 9 ? 3 : moves <= 14 ? 2 : 1;
+    const gained = G.addXp(stars * 4, p);
+    G.addGems(3, p);
+    G.hitStreakToday(p);
+    G.questEvent({ xp: gained, review: 1 }, p);
+    save(true);
+    a.innerHTML = '';
+    const sc = h('div', 'results');
+    sc.appendChild(h('div', 'big-mascot', mascotSvg('cheer')));
+    sc.appendChild(h('div', 'res-title', '⭐'.repeat(stars) + ' Toate perechile!'));
+    const cards2 = h('div', 'res-cards');
+    cards2.appendChild(h('div', 'res-chip acc', `<div class="rc-l">Mutări</div><div class="rc-v">${moves}</div>`));
+    cards2.appendChild(h('div', 'res-chip xp', `<div class="rc-l">XP</div><div class="rc-v">+${gained}</div>`));
+    cards2.appendChild(h('div', 'res-chip gem', `<div class="rc-l">Rubine</div><div class="rc-v">+3</div>`));
+    sc.appendChild(cards2);
+    const again = h('button', 'btn btn-primary btn-big mt16', '🧩 ÎNCĂ O DATĂ');
+    again.addEventListener('click', () => startMemory());
+    const out = h('button', 'btn btn-big mt8', 'Înapoi');
+    out.addEventListener('click', () => nav('practice'));
+    sc.appendChild(again); sc.appendChild(out);
+    a.appendChild(sc);
+    sfx.win();
+  }
 }
 
 // ---------- liga ----------
@@ -1168,7 +1417,7 @@ const NPC_CONFUSED = [
 
 async function startDialog(unitMeta) {
   const p = state.profile;
-  const mySeq = navSeq;
+  const mySeq = ++navSeq; // dublu-tap pe nod = o singură conversație
   try {
     const unit = await loadUnit(unitMeta.id);
     if (mySeq !== navSeq) return;
@@ -1299,34 +1548,22 @@ function renderDialog(unitMeta, unit, dlg) {
     const chips = words.concat(extras).sort(() => Math.random() - 0.5);
     const ans = h('div', 'bank-answer');
     const pool = h('div', 'bank-pool');
-    const placed = [];
-    chips.forEach(wd => {
-      const c = h('button', 'chip', esc(wd));
-      c.addEventListener('click', () => {
-        sfx.tap();
-        if (c.parentElement === pool) { pool.removeChild(c); ans.appendChild(c); placed.push(c); }
-        else { ans.removeChild(c); pool.appendChild(c); placed.splice(placed.indexOf(c), 1); }
-        go.disabled = !placed.length;
-      });
-      pool.appendChild(c);
-    });
+    act.appendChild(ans); act.appendChild(pool);
     const go = h('button', 'btn btn-primary btn-big mt16', 'SPUNE');
     go.disabled = true;
+    const bank = buildChipBank(ans, pool, chips, () => { go.disabled = !bank.count(); });
     go.addEventListener('click', () => {
-      const user = placed.map(c => c.textContent).join(' ');
+      const user = bank.words().join(' ');
       if (norm(user) === norm(ln.en)) { acceptLine(ln); return; }
       sfx.wrong(); wrongTotal++; misses++;
       npcReact();
-      // golim răspunsul pentru o nouă încercare
-      [...ans.querySelectorAll('.chip')].forEach(c => { ans.removeChild(c); pool.appendChild(c); });
-      placed.length = 0;
-      go.disabled = true;
+      bank.reset(); // răspunsul se golește pentru o nouă încercare
       if (misses >= 2 && !hintShown) {
         hintShown = true;
         act.appendChild(h('div', 'ex-sub mt8', '💡 <b>' + esc(ln.en) + '</b>'));
       }
     });
-    act.appendChild(ans); act.appendChild(pool); act.appendChild(go);
+    act.appendChild(go);
   }
 
   function finishDialog() {
@@ -1365,7 +1602,7 @@ function renderDialog(unitMeta, unit, dlg) {
 // indirect (listă de verificare), apoi explicit (model), plus timp de gândire.
 async function startWriting(unitMeta) {
   const p = state.profile;
-  const mySeq = navSeq;
+  const mySeq = ++navSeq;
   try {
     const unit = await loadUnit(unitMeta.id);
     if (mySeq !== navSeq) return;

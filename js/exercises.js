@@ -19,6 +19,100 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ---------- banca de cuvinte partajată ----------
+// Reguli pentru mâini de 55+: jetoanele din rezervă NU se mișcă din loc când alegi unul
+// (rămâne o umbră pe poziție — nimic nu „fuge” de sub deget), iar în rândul de răspuns
+// jetoanele se pot trage cu degetul ca să le schimbi ordinea.
+export function buildChipBank(ansEl, poolEl, chips, onChange) {
+  const placed = []; // jetoanele din răspuns, în ordine
+  let dragEl = null; // un singur jeton tras la un moment dat
+
+  function syncFromDom() {
+    placed.length = 0;
+    ansEl.querySelectorAll('.chip').forEach(c => placed.push(c));
+    onChange && onChange();
+  }
+
+  function attachDrag(c) {
+    c.addEventListener('pointerdown', (e) => {
+      if (dragEl && dragEl !== c) return; // un singur deget trage la un moment dat
+      dragEl = c;
+      c._dragActive = true; c._dragMoved = false; c._sx = e.clientX; c._sy = e.clientY;
+      try { c.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    c.addEventListener('pointermove', (e) => {
+      if (!c._dragActive) return;
+      if (!c._dragMoved && Math.hypot(e.clientX - c._sx, e.clientY - c._sy) > 10) {
+        c._dragMoved = true;
+        c.classList.add('dragging');
+        c.style.pointerEvents = 'none'; // ca elementFromPoint să vadă ce e SUB deget
+      }
+      if (!c._dragMoved) return;
+      e.preventDefault();
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const over = under && under.closest ? under.closest('.chip') : null;
+      if (over && over !== c && over.parentElement === ansEl) {
+        const r = over.getBoundingClientRect();
+        const before = e.clientX < r.left + r.width / 2;
+        ansEl.insertBefore(c, before ? over : over.nextSibling);
+      }
+    });
+    const finish = () => {
+      // curățăm ÎNTOTDEAUNA starea propriului jeton — indiferent ce fac alte degete
+      if (c._dragActive) {
+        c.style.pointerEvents = '';
+        c.classList.remove('dragging');
+        if (c._dragMoved) {
+          c._dragJust = true; // clickul de după tragere nu trebuie să scoată jetonul
+          setTimeout(() => { c._dragJust = false; }, 120);
+          syncFromDom();
+        }
+      }
+      c._dragActive = false; c._dragMoved = false;
+      if (dragEl === c) dragEl = null;
+    };
+    c.addEventListener('pointerup', finish);
+    c.addEventListener('pointercancel', finish);
+  }
+
+  chips.forEach((word) => {
+    const src = h('button', 'chip', esc(word));
+    src.type = 'button';
+    src.addEventListener('click', () => {
+      if (src.classList.contains('used')) return;
+      sfx.tap();
+      src.classList.add('used'); // rămâne pe loc, doar se estompează
+      const a = h('button', 'chip', esc(word));
+      a.type = 'button';
+      a.addEventListener('click', () => {
+        if (a._dragJust) return;
+        sfx.tap();
+        src.classList.remove('used');
+        a.remove();
+        syncFromDom();
+      });
+      attachDrag(a);
+      ansEl.appendChild(a);
+      syncFromDom();
+    });
+    poolEl.appendChild(src);
+  });
+
+  return {
+    words: () => placed.map(c => c.textContent),
+    count: () => placed.length,
+    reset: () => {
+      ansEl.querySelectorAll('.chip').forEach(c => c.remove());
+      poolEl.querySelectorAll('.chip').forEach(c => c.classList.remove('used'));
+      syncFromDom();
+    },
+    disable: () => {
+      ansEl.querySelectorAll('.chip').forEach(c => c.disabled = true);
+      poolEl.querySelectorAll('.chip').forEach(c => c.disabled = true);
+    },
+  };
+}
+
 function audioBtn(text, { small = false, slow = false } = {}) {
   const b = h('button', 'audio-btn' + (small ? ' small' : ''), slow ? '🐢' : '🔊');
   b.type = 'button';
@@ -148,32 +242,16 @@ function mountBank(el, ex, ctx, listenMode) {
   }
   const ans = h('div', 'bank-answer');
   const pool = h('div', 'bank-pool');
-  const placed = [];
-  const mkChip = (word) => {
-    const c = h('button', 'chip', esc(word));
-    c.type = 'button';
-    c.addEventListener('click', () => {
-      sfx.tap();
-      if (c.parentElement === pool) {
-        pool.removeChild(c); ans.appendChild(c); placed.push(c);
-      } else {
-        ans.removeChild(c); pool.appendChild(c);
-        const i = placed.indexOf(c); if (i >= 0) placed.splice(i, 1);
-      }
-      ctx.refresh();
-    });
-    return c;
-  };
-  ex.bank.chips.forEach(wd => pool.appendChild(mkChip(wd)));
   el.appendChild(ans); el.appendChild(pool);
+  const bank = buildChipBank(ans, pool, ex.bank.chips, () => ctx.refresh());
+  el.appendChild(h('div', 'ex-sub tc mt8', 'Poți trage cuvintele ca să le schimbi ordinea.'));
   return {
-    ready: () => placed.length > 0,
+    ready: () => bank.count() > 0,
     check: () => {
-      if (!placed.length) return null;
-      const user = placed.map(c => c.textContent).join(' ');
+      if (!bank.count()) return null;
+      const user = bank.words().join(' ');
       const ok = norm(user) === norm(s.en);
-      pool.querySelectorAll('.chip').forEach(c => c.disabled = true);
-      ans.querySelectorAll('.chip').forEach(c => c.disabled = true);
+      bank.disable();
       return { ok, correctText: s.en, userText: user, wordIds: s.words || [], isListen: !!listenMode };
     },
   };

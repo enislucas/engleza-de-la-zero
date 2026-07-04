@@ -91,14 +91,16 @@ export function recordAnswer(wid, correct, p = state.profile) {
   w.due = todayStr(d);
 }
 
-export function dueWords(unitDatas, p = state.profile, max = 12) {
+export function dueWords(unitDatas, p = state.profile, max = 12, focusBooks = []) {
   const today = todayStr();
   const due = [];
   const known = p.game.words;
   for (const unit of unitDatas) {
+    // pregătirea aleasă (viață în altă țară / muncă) trage în față cuvintele din domeniu
+    const focusBoost = focusBooks.includes(unit.book) ? 8 : 0;
     for (const v of unit.vocab) {
       const w = known[v.id];
-      if (w && w.seen > 0 && w.due <= today) due.push({ v, unit, prio: w.s * 10 - w.wrong });
+      if (w && w.seen > 0 && w.due <= today) due.push({ v, unit, prio: w.s * 10 - w.wrong - focusBoost });
     }
   }
   due.sort((a, b) => a.prio - b.prio); // cele mai slabe primele
@@ -256,7 +258,7 @@ function makeBlank(ex, unit) {
 
 // Lecție de exersare din cuvintele slabe/scadente (nu costă vieți, dă viață înapoi)
 export function buildReview(unitDatas, opts = {}) {
-  const due = dueWords(unitDatas, state.profile, 8);
+  const due = dueWords(unitDatas, state.profile, 8, opts.focusBooks || []);
   let words = due.map(d => ({ w: d.v, unit: d.unit }));
   if (words.length < 5) {
     // completăm cu cuvinte văzute recent (cele mai slabe)

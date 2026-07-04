@@ -187,7 +187,9 @@ button { font-family: inherit; }
   padding: 10px 14px; font-size: 1.05rem; font-weight: 700; cursor: pointer; min-height: 48px;
 }
 .chip:active { transform: translateY(2px); }
-.chip.used { opacity: .25; pointer-events: none; }
+.chip.used { opacity: .25; pointer-events: none; } /* rămâne pe loc — nimic nu se reașază */
+.bank-answer .chip { touch-action: none; } /* permite tragerea cu degetul pentru reordonare */
+.chip.dragging { opacity: .8; transform: scale(1.07); box-shadow: 0 6px 14px rgba(0,0,0,.25); z-index: 20; position: relative; }
 
 /* typing */
 .type-in {
@@ -355,6 +357,23 @@ button { font-family: inherit; }
 .wr-check.bad { color: var(--text2); }
 .wr-model { background: var(--success-bg); border: 2px solid var(--success); border-radius: 14px; padding: 14px; margin-top: 12px; }
 .wr-count { text-align: right; color: var(--text2); font-size: .85rem; margin-top: 4px; }
+
+/* ---------- jocuri arcade ---------- */
+.blitz-top { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 14px; }
+.blitz-timer { font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent-text); }
+.blitz-timer.low { color: var(--danger); animation: pulse 1s infinite; }
+.blitz-score { font-size: 1.3rem; font-weight: 800; color: var(--gold-text); }
+.blitz-word { text-align: center; font-size: 1.9rem; font-weight: 800; margin: 14px 0 16px; color: var(--primary-text); }
+.mem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.mem-card {
+  aspect-ratio: 1; border-radius: 16px; border: 2px solid var(--line); border-bottom-width: 4px;
+  background: var(--card); font-weight: 800; font-size: .98rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; text-align: center; padding: 6px;
+  color: var(--text); overflow: hidden;
+}
+.mem-card.hidden-face { background: var(--accent-bg); color: var(--accent-text); font-size: 1.6rem; }
+.mem-card.matched { border-color: var(--success); background: var(--success-bg); color: var(--success-text); pointer-events: none; }
+.mem-card.wrongpair { border-color: var(--danger); background: var(--danger-bg); }
 
 /* mascot bubble */
 .mascot-line { display: flex; align-items: flex-end; gap: 10px; margin: 8px 0 14px; }
