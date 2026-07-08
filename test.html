@@ -134,6 +134,15 @@ const ta = async (name, fn) => {
         for (const w of (u.writing || [])) {
           if (!w.prompt || !w.modelEn || !w.minSent) return false;
         }
+        if (um.rd !== (u.readings || []).length) return false;
+        for (const r of (u.readings || [])) {
+          if (!r.text || r.text.split(/\s+/).length < 40) return false;
+          for (const q of r.questions) {
+            if (!q.q || q.options.length !== 4) return false;
+            if (!(q.a >= 0 && q.a < 4)) return false;
+            if (new Set(q.options.map(o => o.trim().toLowerCase())).size !== 4) return false;
+          }
+        }
       }
       return true;
     });

@@ -374,6 +374,17 @@ async function renderHome() {
       dNode.appendChild(h('div', 'lesson-label', 'Conversație'));
       path.appendChild(dNode);
     }
+    if (u.rd > 0) {
+      const rNode = h('div', 'path-node');
+      const rDone = (p.game.units[u.id] && p.game.units[u.id].rd) || 0;
+      const rUnlocked = !locked && prog.done >= Math.ceil(u.lessonCount * 0.75);
+      const rb = h('button', 'lesson-btn' + (rDone >= u.rd ? ' done' : !rUnlocked ? ' locked' : ''));
+      rb.innerHTML = rUnlocked || rDone >= u.rd ? '📖' : '🔒';
+      if (rUnlocked) rb.addEventListener('click', () => startReading(u));
+      rNode.appendChild(rb);
+      rNode.appendChild(h('div', 'lesson-label', 'Lectură'));
+      path.appendChild(rNode);
+    }
     if (u.wr > 0) {
       const wNode = h('div', 'path-node');
       const wDone = (p.game.units[u.id] && p.game.units[u.id].wr) || 0;
@@ -1545,6 +1556,131 @@ function renderDialog(unitMeta, unit, dlg) {
   }
 
   step();
+}
+
+// ---------- lectura (înțelegerea textului) ----------
+// Cercetare: B2 cere citit de texte întregi, nu doar propoziții. Textele vin din cărți,
+// la nivelul exact al unității; întrebările urmează aceeași regulă a celor două încercări.
+async function startReading(unitMeta) {
+  const p = state.profile;
+  const mySeq = ++navSeq;
+  try {
+    const unit = await loadUnit(unitMeta.id);
+    if (mySeq !== navSeq) return;
+    const list = unit.readings || [];
+    if (!list.length) { toast('Lectura nu e disponibilă încă.'); return; }
+    const st = p.game.units[unitMeta.id] || (p.game.units[unitMeta.id] = { done: 0, test: false });
+    renderReading(unitMeta, list[(st.rd || 0) % list.length]);
+  } catch (_) { toast('Lectura nu s-a putut încărca.'); }
+}
+
+function renderReading(unitMeta, rd) {
+  const p = state.profile;
+  inActivity = true;
+  const mySeq = navSeq;
+  const a = $app();
+  a.innerHTML = '';
+
+  const top = h('div', 'lesson-top');
+  const quit = h('button', 'btn-quit', '✕');
+  quit.addEventListener('click', () => {
+    confirmModal('Ieși din lectură?', 'O poți relua oricând.', 'Ieși', (yes) => { if (yes) nav('home'); }, { noLabel: 'Rămân' });
+  });
+  const prog = h('div', 'prog');
+  const fill = h('div', 'prog-fill');
+  prog.appendChild(fill);
+  top.appendChild(quit); top.appendChild(prog);
+  top.appendChild(h('div', 'lesson-hearts', '📖'));
+  a.appendChild(top);
+
+  const wrap = h('div', 'ex-wrap');
+  a.appendChild(wrap);
+  wrap.appendChild(h('div', 'ex-title tc', esc(rd.title)));
+
+  const card = h('div', 'card');
+  const audioRow = h('div', 'row');
+  const ab = h('button', 'audio-btn small', '🔊');
+  ab.addEventListener('click', () => speak(rd.text, { rate: 0.85 }));
+  audioRow.appendChild(ab);
+  audioRow.appendChild(h('div', 'ex-sub', 'Citește textul (poți și asculta), apoi răspunde la întrebări.'));
+  card.appendChild(audioRow);
+  card.appendChild(h('p', 'mt8', esc(rd.text).replace(/\n/g, '<br>')));
+  wrap.appendChild(card);
+
+  const qArea = h('div', '');
+  wrap.appendChild(qArea);
+
+  let qi = 0, firstTryRight = 0, misses = 0;
+  function askNext() {
+    if (navSeq !== mySeq) return;
+    fill.style.width = Math.round((qi / rd.questions.length) * 100) + '%';
+    qArea.innerHTML = '';
+    if (qi >= rd.questions.length) { finishReading(); return; }
+    const q = rd.questions[qi];
+    misses = 0;
+    qArea.appendChild(h('div', 'ex-title', esc(q.q)));
+    const opts = h('div', 'opts');
+    q.options.forEach((o, oi) => {
+      const b = h('button', 'opt', `<span class="opt-n">${oi + 1}</span> <span>${esc(o)}</span>`);
+      b.addEventListener('click', () => {
+        if (b.disabled) return;
+        if (oi === q.a) {
+          b.classList.add('correct');
+          if (misses === 0) firstTryRight++;
+          sfx.correct(qi + 1);
+          opts.querySelectorAll('.opt').forEach(x => x.disabled = true);
+          qi++;
+          setTimeout(askNext, 650);
+        } else {
+          misses++;
+          b.classList.add('wrong'); b.disabled = true;
+          sfx.wrong();
+          if (misses >= 2) {
+            // a doua ratare: arătăm răspunsul și mergem mai departe
+            [...opts.children].forEach((x, xi) => { if (xi === q.a) x.classList.add('correct'); x.disabled = true; });
+            qi++;
+            setTimeout(askNext, 1100);
+          } else {
+            toast('Mai caută o dată în text. 🙂');
+          }
+        }
+      });
+      opts.appendChild(b);
+    });
+    qArea.appendChild(opts);
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  function finishReading() {
+    if (navSeq !== mySeq) return;
+    const st = p.game.units[unitMeta.id] || (p.game.units[unitMeta.id] = { done: 0, test: false });
+    st.rd = (st.rd || 0) + 1;
+    const full = firstTryRight === rd.questions.length;
+    const gained = G.addXp(full ? 12 : 8, p);
+    G.addGems(2, p);
+    p.game.stats.lessons++;
+    const streakRes = G.hitStreakToday(p);
+    G.questEvent({ xp: gained }, p);
+    save(true);
+    a.innerHTML = '';
+    const sc = h('div', 'results');
+    sc.appendChild(h('div', 'big-mascot', mascotSvg(full ? 'cheer' : 'happy')));
+    sc.appendChild(h('div', 'res-title', full ? 'Lectură perfectă! 📖' : 'Lectură terminată!'));
+    const cards = h('div', 'res-cards');
+    cards.appendChild(h('div', 'res-chip acc', `<div class="rc-l">Din prima</div><div class="rc-v">${firstTryRight}/${rd.questions.length}</div>`));
+    cards.appendChild(h('div', 'res-chip xp', `<div class="rc-l">XP</div><div class="rc-v">+${gained}</div>`));
+    cards.appendChild(h('div', 'res-chip gem', `<div class="rc-l">Rubine</div><div class="rc-v">+2</div>`));
+    sc.appendChild(cards);
+    if (streakRes.extended) sc.appendChild(h('p', '', `🔥 Seria: <b>${p.game.streak.count} zile</b>`));
+    sc.appendChild(h('p', 'sub', 'Ai citit un text întreg în engleză. Exact asta cere nivelul următor.'));
+    const cont = h('button', 'btn btn-primary btn-big mt24', 'CONTINUĂ');
+    cont.addEventListener('click', () => nav('home'));
+    sc.appendChild(cont);
+    a.appendChild(sc);
+    sfx.win();
+  }
+
+  askNext();
 }
 
 // ---------- atelierul de scriere ----------

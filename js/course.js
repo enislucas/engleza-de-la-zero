@@ -34,6 +34,8 @@ export async function loadUnit(unitId) {
   data.lessons = Array.isArray(data.lessons) ? data.lessons : [];
   data.dialogues = (Array.isArray(data.dialogues) ? data.dialogues : [])
     .filter(d => d && Array.isArray(d.lines) && d.lines.length >= 2);
+  data.readings = (Array.isArray(data.readings) ? data.readings : [])
+    .filter(r => r && r.text && Array.isArray(r.questions) && r.questions.length >= 2);
   data.writing = (Array.isArray(data.writing) ? data.writing : [])
     .filter(w => w && w.prompt && w.modelEn)
     .map(w => ({ ...w, required: Array.isArray(w.required) ? w.required : [], starters: Array.isArray(w.starters) ? w.starters : [], tips: Array.isArray(w.tips) ? w.tips : [] }));
