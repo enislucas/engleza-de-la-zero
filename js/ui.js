@@ -56,11 +56,6 @@ function confirmModal(title, text, yesLabel, cb, opts = {}) {
 }
 
 // ---------- bara de statistici ----------
-function fmtMs(ms) {
-  const m = Math.ceil(ms / 60000);
-  if (m >= 60) return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
-  return m + ' min';
-}
 
 function statbar() {
   const p = state.profile, g = p.game;
@@ -70,13 +65,13 @@ function statbar() {
   streakBtn.addEventListener('click', showStreakModal);
   const gemBtn = h('button', 'stat gems', `<span class="ico">💎</span> ${g.gems}`);
   gemBtn.addEventListener('click', showShop);
-  const hearts = G.heartsNow(p);
-  const heartBtn = h('button', 'stat hearts', `<span class="ico">${hearts > 0 ? '❤️' : '🤍'}</span> ${hearts}`);
-  heartBtn.addEventListener('click', showHeartsModal);
+  const xpBtn = h('button', 'stat', `<span class="ico">⚡</span> ${g.xp}`);
+  xpBtn.setAttribute('aria-label', 'XP total');
+  xpBtn.addEventListener('click', () => nav('profile'));
   const prof = h('button', 'stat', `<span class="ico">${esc(p.avatar)}</span>`);
   prof.setAttribute('aria-label', 'Profil');
   prof.addEventListener('click', () => nav('profile'));
-  bar.appendChild(streakBtn); bar.appendChild(gemBtn); bar.appendChild(heartBtn); bar.appendChild(prof);
+  bar.appendChild(streakBtn); bar.appendChild(gemBtn); bar.appendChild(xpBtn); bar.appendChild(prof);
   return bar;
 }
 
@@ -458,35 +453,6 @@ function showStreakModal() {
   const back = modal('Seria ta', body);
 }
 
-function showHeartsModal() {
-  const p = state.profile;
-  const hearts = G.heartsNow(p);
-  const body = h('div');
-  body.appendChild(h('p', 'tc', `<span style="font-size:2.2rem">${'❤️'.repeat(hearts)}${'🤍'.repeat(G.HEARTS_MAX - hearts)}</span>`));
-  if (hearts < G.HEARTS_MAX) {
-    body.appendChild(h('p', 'sub tc', `O viață revine în ${fmtMs(G.nextHeartInMs(p))}. Exersarea nu costă vieți — și îți dă una înapoi.`));
-    const pb = h('button', 'btn btn-big mt8', '💪 Exersează și primești o viață');
-    pb.addEventListener('click', () => { back.remove(); nav('practice'); });
-    body.appendChild(pb);
-    const b1 = h('button', 'btn btn-big mt8', `+1 viață — 💎 ${G.COSTS.heartOne}`);
-    b1.addEventListener('click', () => {
-      if (G.buyHearts('one')) { sfx.gem(); back.remove(); toast('+1 viață ❤️'); nav(currentRoute); }
-      else toast('Nu ai destule rubine.');
-    });
-    body.appendChild(b1);
-    const bf = h('button', 'btn btn-primary btn-big mt8', `Vieți pline — 💎 ${G.COSTS.heartsFull}`);
-    bf.addEventListener('click', () => {
-      if (G.buyHearts('full')) { sfx.gem(); back.remove(); toast('Vieți pline! ❤️❤️❤️❤️❤️'); nav(currentRoute); }
-      else toast('Nu ai destule rubine.');
-    });
-    body.appendChild(bf);
-  } else {
-    body.appendChild(h('p', 'sub tc', 'Ai toate viețile. Greșelile din lecții costă câte o viață — dar prima greșeală din fiecare lecție e gratuită.'));
-  }
-  body.appendChild(h('p', 'sub tc mt8', '🕒 Viețile se refac singure: una la 3 ore. Exersarea îți dă mereu una înapoi.'));
-  const back = modal('Vieți', body);
-}
-
 function showShop() {
   const p = state.profile, g = p.game;
   const body = h('div');
@@ -494,8 +460,6 @@ function showShop() {
   const items = [
     { ico: '❄️', t: 'Înghețător de serie', d: `Se folosește singur dacă lipsești o zi. Ai ${g.streak.freezes}/2.`, cost: G.COSTS.freeze, can: g.streak.freezes < 2, act: () => G.buyFreeze() },
     { ico: '⚡', t: 'XP dublu 15 minute', d: 'Tot XP-ul se dublează un sfert de oră.', cost: G.COSTS.boost, can: !G.xpBoostActive(p), act: () => G.buyBoost() },
-    { ico: '❤️', t: 'O viață', d: 'Îți dă o viață înapoi.', cost: G.COSTS.heartOne, can: G.heartsNow(p) < G.HEARTS_MAX, act: () => G.buyHearts('one') },
-    { ico: '💖', t: 'Vieți pline', d: 'Toate cele 5 vieți, imediat.', cost: G.COSTS.heartsFull, can: G.heartsNow(p) < G.HEARTS_MAX, act: () => G.buyHearts('full') },
   ];
   for (const it of items) {
     const c = h('div', 'card flat shop-item');
@@ -522,7 +486,6 @@ async function startLesson(unitMeta, lessonIdx, opts = {}) {
     const unit = await loadUnit(unitMeta.id);
     if (mySeq !== navSeq) return; // utilizatorul a plecat de pe ecran între timp
     const isTest = !!opts.test;
-    if (!opts.review && G.heartsNow(p) === 0) { showHeartsModal(); return; }
 
     let exercises;
     const specs = unit.lessons || [];
@@ -541,7 +504,7 @@ async function startLesson(unitMeta, lessonIdx, opts = {}) {
     if (!exercises.length) { toast('Lecția nu are conținut.'); return; }
     lessonState = {
       unitMeta, unit, lessonIdx, isTest, redo: !!opts.redo, review: false,
-      exercises, i: 0, right: 0, wrong: 0, listenRight: 0, freeMistakeUsed: false,
+      exercises, i: 0, right: 0, wrong: 0, listenRight: 0,
       combo: 0, bestCombo: 0,
     };
     renderExercise();
@@ -562,7 +525,7 @@ async function startReview() {
     if (!exercises.length) { toast('Nu ai încă ce exersa — mai fă o lecție!'); return; }
     lessonState = {
       unitMeta: null, unit: null, lessonIdx: -1, isTest: false, redo: false, review: true,
-      exercises, i: 0, right: 0, wrong: 0, listenRight: 0, freeMistakeUsed: true,
+      exercises, i: 0, right: 0, wrong: 0, listenRight: 0,
       combo: 0, bestCombo: 0,
     };
     renderExercise();
@@ -592,11 +555,7 @@ function renderExercise() {
   fill.style.width = Math.round((L.i / L.exercises.length) * 100) + '%';
   prog.appendChild(fill);
   top.appendChild(quit); top.appendChild(prog);
-  if (!L.review) {
-    top.appendChild(h('div', 'lesson-hearts', '❤️ ' + G.heartsNow(p)));
-  } else {
-    top.appendChild(h('div', 'lesson-hearts', '💪'));
-  }
+  top.appendChild(h('div', 'lesson-hearts', L.review ? '💪' : '⭐'));
   a.appendChild(top);
 
   const wrap = h('div', 'ex-wrap');
@@ -666,14 +625,7 @@ function renderExercise() {
       L.combo = 0;
       ex._misses = (ex._misses || 0) + 1;
       sfx.wrong();
-      if (!res.noHeart && !L.review) {
-        if (!L.freeMistakeUsed) {
-          L.freeMistakeUsed = true;
-          toast('Prima greșeală e gratuită. 😉');
-        } else {
-          G.loseHeart(p);
-        }
-      }
+      // greșelile nu costă nimic: exercițiul revine până e stăpânit — asta e „taxa”
     }
     showFeedback(res);
   }
@@ -761,7 +713,6 @@ function finishLesson() {
     xp: gained, lessons: L.review ? 0 : 1, perfect: perfect && !L.review ? 1 : 0,
     listen: L.listenRight, review: L.review ? 1 : 0,
   }, p);
-  if (L.review) G.addHearts(1, p);
   save(true);
 
   // ecran rezultate
@@ -777,7 +728,6 @@ function finishLesson() {
   cards.appendChild(h('div', 'res-chip xp', `<div class="rc-l">XP</div><div class="rc-v">+${gained}</div>`));
   cards.appendChild(h('div', 'res-chip acc', `<div class="rc-l">Precizie</div><div class="rc-v">${acc}%</div>`));
   if (gems) cards.appendChild(h('div', 'res-chip gem', `<div class="rc-l">Rubine</div><div class="rc-v">+${gems}</div>`));
-  if (L.review) cards.appendChild(h('div', 'res-chip', `<div class="rc-l">Viață</div><div class="rc-v">+1 ❤️</div>`));
   sc.appendChild(cards);
 
   if (streakRes.extended) {
@@ -826,7 +776,7 @@ async function renderPractice() {
   a.appendChild(navbar('practice'));
 
   sc.appendChild(h('div', 'h1', 'Exersează 💪'));
-  sc.appendChild(h('p', 'sub', 'Exersarea nu costă vieți — ba chiar primești una înapoi. Cuvintele slabe revin până le stăpânești.'));
+  sc.appendChild(h('p', 'sub', 'Cuvintele slabe revin aici până le stăpânești. Cinci minute de exersare țin vocabularul viu.'));
 
   const p = state.profile;
   let due = 0;
@@ -1181,7 +1131,7 @@ function renderQuests() {
   }
 
   const shopCard = h('div', 'card row');
-  shopCard.innerHTML = `<span style="font-size:2rem">🛒</span><div class="grow"><b>Magazin</b><div class="set-d">Înghețătoare de serie, vieți, XP dublu</div></div>`;
+  shopCard.innerHTML = `<span style="font-size:2rem">🛒</span><div class="grow"><b>Magazin</b><div class="set-d">Înghețătoare de serie, XP dublu</div></div>`;
   const sb = h('button', 'btn q-claim', 'Deschide');
   sb.addEventListener('click', showShop);
   shopCard.appendChild(sb);

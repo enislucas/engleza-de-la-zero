@@ -35,7 +35,7 @@ const ta = async (name, fn) => {
 
     // ---- state ----
     await ta('state.load fresh', async () => { const d = await S.load(); return !!d && Array.isArray(d.profiles); });
-    t('addProfile', () => { const p = S.addProfile('Test', '🙂'); return S.state.profile === p && p.game.hearts === 5; });
+    t('addProfile', () => { const p = S.addProfile('Test', '🙂'); return S.state.profile === p && p.game.gems === 120; });
     t('export/import roundtrip', () => {
       const code = S.exportCode();
       S.state.profile.game.xp = 77; S.save(true);
@@ -139,12 +139,14 @@ const ta = async (name, fn) => {
     });
 
     // ---- gamify ----
-    t('hearts lose/regen math', () => {
+    t('gems add/spend math', () => {
       const p = S.state.profile;
-      p.game.hearts = 5; G.loseHeart(p);
-      if (p.game.hearts !== 4) return false;
-      p.game.heartsAt = Date.now() - 3.2 * 3600 * 1000;
-      return G.heartsNow(p) === 5;
+      const before = p.game.gems;
+      G.addGems(30, p);
+      if (p.game.gems !== before + 30) return false;
+      p.game.gems = 200; p.game.streak.freezes = 0;
+      if (!G.buyFreeze()) return false;
+      return p.game.gems === 200 - G.COSTS.freeze && p.game.streak.freezes === 1;
     });
     t('addXp + boost', () => {
       const p = S.state.profile;
