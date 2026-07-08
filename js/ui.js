@@ -5,7 +5,7 @@ import { state, save, todayStr, addProfile, switchProfile, applyPrefs, exportCod
 import * as G from './gamify.js';
 import { TIERS, standings, syncLeague, daysLeftInWeek } from './league.js';
 import { loadCourse, loadUnit, loadStartedUnits, unitProgress } from './course.js';
-import { buildLesson, buildReview, recordAnswer, countDue, norm } from './engine.js';
+import { buildLesson, buildCrown, buildReview, recordAnswer, countDue, norm } from './engine.js';
 import { mountExercise, buildChipBank } from './exercises.js';
 import { mascotSvg, CHEERS, SOFT_WRONG, RETRY_SOON, pick } from './mascot.js';
 import { speak, ttsAvailable, sttAvailable, stopSpeaking, listEnVoices, refreshVoice } from './speech.js';
@@ -405,6 +405,18 @@ async function renderHome() {
     tnode.appendChild(tb);
     tnode.appendChild(h('div', 'lesson-label', 'Proba unității'));
     path.appendChild(tnode);
+    // nivelurile coroană: aceleași cuvinte, mult mai greu — pentru cine vrea mai mult
+    const crowns = (p.game.units[u.id] && p.game.units[u.id].crowns) || 0;
+    [[2, '👑 Expert', prog.test], [3, '👑 Maestru', crowns >= 2]].forEach(([lvl, label, unlocked]) => {
+      const cNode = h('div', 'path-node');
+      const won = crowns >= lvl;
+      const cb = h('button', 'lesson-btn' + (won ? ' done' : !unlocked ? ' locked' : ''));
+      cb.innerHTML = won ? '👑' : unlocked ? '💪' : '🔒';
+      if (unlocked) cb.addEventListener('click', () => startCrown(u, lvl));
+      cNode.appendChild(cb);
+      cNode.appendChild(h('div', 'lesson-label', label));
+      path.appendChild(cNode);
+    });
     sc.appendChild(path);
   });
 }
@@ -522,6 +534,23 @@ async function startLesson(unitMeta, lessonIdx, opts = {}) {
   } catch (err) {
     toast('Lecția nu s-a putut încărca. Verifică internetul.');
   }
+}
+
+async function startCrown(unitMeta, level) {
+  const p = state.profile;
+  const mySeq = ++navSeq;
+  try {
+    const unit = await loadUnit(unitMeta.id);
+    if (mySeq !== navSeq) return;
+    const exercises = buildCrown(unit, { hard: level, canListen: ttsAvailable(), canSpeak: ttsAvailable() });
+    if (exercises.length < 6) { toast('Nivelul nu are destul conținut.'); return; }
+    lessonState = {
+      unitMeta, unit, lessonIdx: -1, isTest: false, redo: false, review: false, crown: level,
+      exercises, i: 0, right: 0, wrong: 0, listenRight: 0,
+      combo: 0, bestCombo: 0,
+    };
+    renderExercise();
+  } catch (_) { toast('Nivelul nu s-a putut încărca.'); }
 }
 
 async function startReview() {
@@ -691,7 +720,7 @@ function finishLesson() {
   const perfect = L.wrong === 0;
 
   // XP
-  let base = L.review ? 8 : L.isTest ? 20 : 10;
+  let base = L.review ? 8 : L.isTest ? 20 : L.crown === 3 ? 20 : L.crown === 2 ? 15 : 10;
   if (perfect && !L.review) base += 5;
   if (L.bestCombo >= 5) base += 3;
   const gained = G.addXp(base, p);
@@ -699,10 +728,20 @@ function finishLesson() {
   // rubine — recompense fixe și previzibile: știi mereu pentru ce muncești
   let gems = 0;
   if (L.isTest && acc >= 80) gems = 25;
+  else if (L.crown && acc >= 80) gems = L.crown === 3 ? 12 : 8;
   else if (perfect) gems = 10;
   else if (L.review) gems = 2;
   else gems = 3;
   if (gems) G.addGems(gems, p);
+
+  // coroanele: nivelul greu cucerit la 80%+
+  let crownWon = 0, crownMissed = false;
+  if (L.crown && L.unitMeta) {
+    const stc = p.game.units[L.unitMeta.id] || (p.game.units[L.unitMeta.id] = { done: 0, test: false });
+    if (acc >= 80) {
+      if ((stc.crowns || 0) < L.crown) { stc.crowns = L.crown; crownWon = L.crown; }
+    } else crownMissed = true;
+  }
 
   // progres unitate
   let testPassed = false, testFailed = false;
@@ -730,11 +769,13 @@ function finishLesson() {
   const a = $app();
   a.innerHTML = '';
   const sc = h('div', 'results');
-  const mood = testFailed ? 'sad' : perfect ? 'cheer' : 'happy';
+  const mood = (testFailed || crownMissed) ? 'sad' : (perfect || crownWon) ? 'cheer' : 'happy';
   sc.appendChild(h('div', 'big-mascot', mascotSvg(mood)));
   sc.appendChild(h('div', 'res-title', testFailed
     ? 'Aproape! Îți trebuie 80% la probă.'
-    : L.isTest ? '👑 Probă trecută!' : perfect ? 'Lecție PERFECTĂ!' : 'Lecție terminată!'));
+    : crownWon ? (crownWon === 3 ? '👑 MAESTRU al unității!' : '👑 EXPERT al unității!')
+    : crownMissed ? 'Aproape de coroană! Îți trebuie 80%.'
+    : L.isTest ? '🏁 Probă trecută!' : perfect ? 'Lecție PERFECTĂ!' : 'Lecție terminată!'));
   const cards = h('div', 'res-cards');
   cards.appendChild(h('div', 'res-chip xp', `<div class="rc-l">XP</div><div class="rc-v">+${gained}</div>`));
   cards.appendChild(h('div', 'res-chip acc', `<div class="rc-l">Precizie</div><div class="rc-v">${acc}%</div>`));
@@ -744,6 +785,10 @@ function finishLesson() {
   if (streakRes.extended) {
     sc.appendChild(h('p', '', `🔥 Seria: <b>${p.game.streak.count} ${p.game.streak.count === 1 ? 'zi' : 'zile'}</b>`));
     sfx.streak();
+  }
+  if (testPassed && L.unitMeta) {
+    // aplicația merge repede; cărțile dau adâncimea — legăm ritmurile
+    sc.appendChild(h('p', 'sub', `📚 Înainte de unitatea următoare: examenul din <b>Cartea ${L.unitMeta.book}</b>, pe hârtie. Peste 80% și mergi mai departe cu inima împăcată.`));
   }
   if (streakRes.milestone) {
     sc.appendChild(h('p', '', `🎉 <b>${streakRes.milestone} zile la rând!</b> Ai primit un cadou de rubine!`));

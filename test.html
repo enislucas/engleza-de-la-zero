@@ -108,6 +108,16 @@ const ta = async (name, fn) => {
       const exs = E.buildLesson(u, { vocab: u.lessons.flatMap(l => l.vocab), sentences: u.lessons.flatMap(l => l.sentences), grammar: 'g1' }, { test: true, canListen: true, unit: u });
       return exs.length >= 8 && !exs.some(x => x.type === 'wordcard');
     });
+    await ta('crown levels build hard exercises', async () => {
+      const u = await C.loadUnit('u01');
+      const e2 = E.buildCrown(u, { hard: 2, canListen: true, canSpeak: false });
+      const e3 = E.buildCrown(u, { hard: 3, canListen: true, canSpeak: true });
+      if (e2.length < 8 || e3.length < 8) return false;
+      if (e2.some(x => x.type === 'wordcard' || x.type === 'mcq_en_ro')) return false;
+      if (!e3.some(x => ['type_en', 'listen_type', 'listen_bank'].includes(x.type))) return false;
+      for (const x of [...e2, ...e3]) if (x.opts4 && x.opts4.length !== 4) return false;
+      return true;
+    });
     await ta('buildReview after answers', async () => {
       const u = await C.loadUnit('u01');
       for (const v of u.vocab.slice(0, 6)) E.recordAnswer(v.id, false); // slabe → scadente azi? due = azi+0

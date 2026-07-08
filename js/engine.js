@@ -149,6 +149,42 @@ function bankFor(sentence, pool) {
   return { words, chips: shuffled(words.concat(extras)) };
 }
 
+// Nivelurile coroană: aceleași cuvinte, exerciții mai grele. hard=2 (Expert): fără
+// cartonașe, producție în loc de recunoaștere. hard=3 (Maestru): scris + ascultat + vorbit.
+export function buildCrown(unit, opts = {}) {
+  const hard = opts.hard || 2;
+  const words = pickN(unit.vocab, 12);
+  const sents = pickN(unit.sentences || [], 10);
+  const pool = unit.vocab.concat(opts.globalVocab || []);
+  const exs = [];
+  for (const w of words.slice(0, hard === 3 ? 4 : 6)) {
+    if (hard === 3 && opts.canListen) exs.push({ type: 'listen_mcq', word: w, opts4: shuffled([w, ...distractorsFor(w, pool)]) });
+    else exs.push({ type: 'mcq_ro_en', word: w, opts4: shuffled([w, ...distractorsFor(w, pool)]) });
+  }
+  for (const s of sents) {
+    if (exs.length >= 13) break;
+    if (hard === 3) {
+      const kinds = ['type_en'];
+      if (opts.canListen) kinds.push('listen_type', 'listen_bank');
+      const k = kinds[Math.floor(Math.random() * kinds.length)];
+      if (k === 'type_en') exs.push({ type: 'type_en', sentence: s });
+      else if (k === 'listen_type') exs.push({ type: 'listen_type', sentence: s });
+      else exs.push({ type: 'listen_bank', sentence: s, bank: bankFor(s, pool) });
+    } else {
+      exs.push(Math.random() < 0.6
+        ? { type: 'wordbank', sentence: s, bank: bankFor(s, pool) }
+        : { type: 'type_en', sentence: s });
+    }
+  }
+  if (opts.canSpeak && sents.length) {
+    exs.push({ type: 'speak', sentence: sents[0] });
+  }
+  for (const t of pickN(unit.traps || [], hard === 3 ? 2 : 1)) {
+    exs.push({ type: 'trap', trap: t });
+  }
+  return shuffled(exs).slice(0, 14);
+}
+
 // Construiește o lecție. spec: {vocab:[ids], sentences:[ids], grammar:id|null}
 // opts: {canListen, canSpeak, review, test, unit, globalVocab}
 export function buildLesson(unit, spec, opts = {}) {
