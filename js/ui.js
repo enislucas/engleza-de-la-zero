@@ -350,13 +350,24 @@ async function renderHome() {
       const isLocked = locked || i > prog.done;
       const b = h('button', 'lesson-btn' + (done ? ' done' : isLocked ? ' locked' : ''));
       b.innerHTML = done ? '✅' : isLocked ? '🔒' : '⭐';
+      // coroanele pe lecție: după proba unității, fiecare lecție se recucerește la greu
+      const lcMap = (p.game.units[u.id] && p.game.units[u.id].lc) || {};
+      const lcTier = lcMap[i] || 0;
+      if (lcTier) {
+        const badge = h('span', 'crown', '👑');
+        if (lcTier >= 3) badge.style.background = '#e9defc';
+        b.appendChild(badge);
+      }
       if (isCurrent) {
         node.classList.add('current');
         const bub = h('div', 'start-bubble', prog.done === 0 && idx === 0 && p.game.stats.lessons === 0 ? 'ÎNCEPE AICI' : 'CONTINUĂ');
         node.appendChild(bub);
       }
       if (!isLocked || done) {
-        b.addEventListener('click', () => startLesson(u, i, { redo: done }));
+        b.addEventListener('click', () => {
+          if (done && prog.test) showLessonTiers(u, i, lcTier);
+          else startLesson(u, i, { redo: done });
+        });
       }
       node.appendChild(b);
       node.appendChild(h('div', 'lesson-label', esc((u.lessonTitles && u.lessonTitles[i]) || `Lecția ${i + 1}`)));
@@ -412,7 +423,7 @@ async function renderHome() {
       const won = crowns >= lvl;
       const cb = h('button', 'lesson-btn' + (won ? ' done' : !unlocked ? ' locked' : ''));
       cb.innerHTML = won ? '👑' : unlocked ? '💪' : '🔒';
-      if (unlocked) cb.addEventListener('click', () => startCrown(u, lvl));
+      if (unlocked) cb.addEventListener('click', () => crownGate(() => startCrown(u, lvl)));
       cNode.appendChild(cb);
       cNode.appendChild(h('div', 'lesson-label', label));
       path.appendChild(cNode);
@@ -534,6 +545,60 @@ async function startLesson(unitMeta, lessonIdx, opts = {}) {
   } catch (err) {
     toast('Lecția nu s-a putut încărca. Verifică internetul.');
   }
+}
+
+// Poarta coroanelor: nivelurile grele sunt DOAR ale cursantului. Fără rușine, fără
+// presiune — dar spuse limpede: dacă le trece altcineva, cuvintele nu se mută în capul tău.
+function crownGate(cb) {
+  const body = h('div');
+  body.appendChild(h('div', 'tc', mascotSvg('teach')));
+  body.appendChild(h('p', 'sub', 'Coroanele nu deblochează nimic și nu se pot pierde. Singurul lor rost este ca engleza să rămână <b>la tine</b>.'));
+  body.appendChild(h('p', 'sub mt8', 'Dacă altcineva trece nivelul în locul tău, coroana minte — iar cuvintele lipsesc exact când ai nevoie de ele: la doctor, la muncă, pe drum. Ai voie să greșești oricât. Scopul e învățarea, nu trecerea.'));
+  const go = h('button', 'btn btn-primary btn-big mt16', 'ÎL FAC EU ✋');
+  const later = h('button', 'btn btn-big mt8', 'Mai târziu');
+  body.appendChild(go); body.appendChild(later);
+  const back = modal('👑 Nivel greu — doar al tău', body);
+  go.addEventListener('click', () => { back.remove(); cb(); });
+  later.addEventListener('click', () => back.remove());
+}
+
+// alegerea nivelului pentru o lecție deja terminată (după proba unității)
+function showLessonTiers(unitMeta, lessonIdx, earned) {
+  const body = h('div');
+  body.appendChild(h('p', 'sub', 'Aceeași lecție, trei trepte. Coroanele se câștigă cu 80%.'));
+  const mk = (label, desc, locked, act, badge) => {
+    const b = h('button', 'btn btn-big mt8', `${badge} ${label}`);
+    if (locked) { b.disabled = true; }
+    b.addEventListener('click', () => { back.remove(); act(); });
+    body.appendChild(b);
+    body.appendChild(h('div', 'set-d tc', desc));
+  };
+  mk('Repetă lecția', 'varianta normală, oricând', false,
+    () => startLesson(unitMeta, lessonIdx, { redo: true }), '⭐');
+  mk('Expert', earned >= 2 ? 'cucerit 👑 — poți repeta' : 'fără cartonașe, doar producție', false,
+    () => crownGate(() => startLessonTier(unitMeta, lessonIdx, 2)), '👑');
+  mk('Maestru', earned >= 2 ? (earned >= 3 ? 'cucerit 👑 — poți repeta' : 'scris, ascultat, vorbit') : 'se deschide după Expert', earned < 2,
+    () => crownGate(() => startLessonTier(unitMeta, lessonIdx, 3)), '👑');
+  const back = modal('Alege nivelul', body);
+}
+
+async function startLessonTier(unitMeta, lessonIdx, tier) {
+  const p = state.profile;
+  const mySeq = ++navSeq;
+  try {
+    const unit = await loadUnit(unitMeta.id);
+    if (mySeq !== navSeq) return;
+    const spec = unit.lessons[lessonIdx];
+    if (!spec) { toast('Lecția nu există.'); return; }
+    const exercises = buildCrown(unit, { hard: tier, canListen: ttsAvailable(), canSpeak: ttsAvailable(), spec });
+    if (exercises.length < 6) { toast('Nivelul nu are destul conținut.'); return; }
+    lessonState = {
+      unitMeta, unit, lessonIdx, isTest: false, redo: false, review: false, crown: tier, lessonTier: true,
+      exercises, i: 0, right: 0, wrong: 0, listenRight: 0,
+      combo: 0, bestCombo: 0,
+    };
+    renderExercise();
+  } catch (_) { toast('Nivelul nu s-a putut încărca.'); }
 }
 
 async function startCrown(unitMeta, level) {
@@ -739,7 +804,11 @@ function finishLesson() {
   if (L.crown && L.unitMeta) {
     const stc = p.game.units[L.unitMeta.id] || (p.game.units[L.unitMeta.id] = { done: 0, test: false });
     if (acc >= 80) {
-      if ((stc.crowns || 0) < L.crown) { stc.crowns = L.crown; crownWon = L.crown; }
+      if (L.lessonTier) {
+        // coroana pe lecție
+        if (!stc.lc) stc.lc = {};
+        if ((stc.lc[L.lessonIdx] || 0) < L.crown) { stc.lc[L.lessonIdx] = L.crown; crownWon = L.crown; }
+      } else if ((stc.crowns || 0) < L.crown) { stc.crowns = L.crown; crownWon = L.crown; }
     } else crownMissed = true;
   }
 

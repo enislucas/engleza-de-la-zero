@@ -153,8 +153,20 @@ function bankFor(sentence, pool) {
 // cartonașe, producție în loc de recunoaștere. hard=3 (Maestru): scris + ascultat + vorbit.
 export function buildCrown(unit, opts = {}) {
   const hard = opts.hard || 2;
-  const words = pickN(unit.vocab, 12);
-  const sents = pickN(unit.sentences || [], 10);
+  // opts.spec: aceeași lecție, dar în variantă grea (coroanele pe lecție)
+  let words, sents;
+  if (opts.spec) {
+    const vmap = Object.fromEntries(unit.vocab.map(v => [v.id, v]));
+    const smap = Object.fromEntries((unit.sentences || []).map(s => [s.id, s]));
+    words = pickN([...new Set(opts.spec.vocab || [])].map(id => vmap[id]).filter(Boolean), 12);
+    sents = pickN([...new Set(opts.spec.sentences || [])].map(id => smap[id]).filter(Boolean), 10);
+    // lecțiile mici împrumută din restul unității ca nivelul să aibă substanță
+    if (words.length < 4) words = words.concat(pickN(unit.vocab.filter(v => !words.includes(v)), 4 - words.length));
+    if (sents.length < 4) sents = sents.concat(pickN((unit.sentences || []).filter(s => !sents.includes(s)), 4 - sents.length));
+  } else {
+    words = pickN(unit.vocab, 12);
+    sents = pickN(unit.sentences || [], 10);
+  }
   const pool = unit.vocab.concat(opts.globalVocab || []);
   const exs = [];
   for (const w of words.slice(0, hard === 3 ? 4 : 6)) {
