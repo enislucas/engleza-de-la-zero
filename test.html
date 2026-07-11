@@ -53,6 +53,13 @@ const ta = async (name, fn) => {
     t('checkTyped exact', () => E.checkTyped('I am tired.', 'I am tired').ok === true);
     t('checkTyped typo ok', () => E.checkTyped('I am tirred', 'I am tired').ok === true);
     t('checkTyped wrong', () => E.checkTyped('I am happy', 'I am tired').ok === false);
+    t('checkTyped contracție = formă plină', () => E.checkTyped("I'm fine", 'I am fine').ok === true && E.checkTyped('I am fine', "I'm fine").ok === true);
+    t('checkTyped fără apostrof', () => E.checkTyped('Im fine', "I'm fine").ok === true && E.checkTyped('dont go', "Don't go!").ok === true);
+    t('checkTyped its = it is', () => E.checkTyped('its cold', "It's cold.").ok === true);
+    t('checkTyped numere în litere', () => E.checkTyped('I am fifty years old', 'I am 50 years old.').ok === true);
+    t('checkTyped alternative acceptate', () => E.checkTyped('I like reading', 'I like to read.', ['I like reading.']).ok === true && E.checkTyped('I like reading', 'I like to read.').ok === false);
+    t('checkTyped gramatica rămâne strictă', () => E.checkTyped('he am tired', 'He is tired.').ok === false && E.checkTyped('I is fine', 'I am fine.').ok === false);
+    t('checkTyped cratima nu contează', () => E.checkTyped('ice cream', 'ice-cream').ok === true);
     t('checkSpoken', () => E.checkSpoken(['i am tired'], 'I am tired.').ok === true && E.checkSpoken(['hello world'], 'I am tired.').ok === false);
     t('recordAnswer SRS up/down', () => {
       E.recordAnswer('wx', true);

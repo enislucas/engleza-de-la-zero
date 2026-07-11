@@ -287,7 +287,9 @@ function mountType(el, ex, ctx, listenMode) {
     ready: () => norm(ta.value).length > 0,
     check: () => {
       if (!norm(ta.value)) return null;
-      const r = checkTyped(ta.value, s.en);
+      // la dictare (ascultă și scrie) alternativele NU se aplică: scrii ce s-a spus;
+      // la traducere, orice traducere corectă din lista propoziției e acceptată
+      const r = checkTyped(ta.value, s.en, listenMode ? null : s.alt);
       ta.disabled = true;
       return {
         ok: r.ok,

@@ -9,9 +9,93 @@ export function norm(s) {
   return String(s || '')
     .toLowerCase()
     .replace(/[’‘`´]/g, "'")
-    .replace(/[.,!?;:"“”()\[\]]/g, ' ')
+    .replace(/[.,!?;:"“”()\[\]\-–—]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// ---------- echivalențe de scriere: nicio formă corectă nu e "greșită" ----------
+// contracție -> forma plină; acceptăm și variantele fără apostrof (Im, dont, youre...),
+// pentru că un apostrof lipsă nu înseamnă engleză greșită
+const EXPAND = {
+  "i'm": 'i am', im: 'i am',
+  "you're": 'you are', youre: 'you are',
+  "he's": 'he is', hes: 'he is',
+  "she's": 'she is', shes: 'she is',
+  "it's": 'it is', its: 'it is',
+  "we're": 'we are',
+  "they're": 'they are', theyre: 'they are',
+  "that's": 'that is', thats: 'that is',
+  "what's": 'what is', whats: 'what is',
+  "who's": 'who is', whos: 'who is',
+  "there's": 'there is', theres: 'there is',
+  "here's": 'here is', heres: 'here is',
+  "let's": 'let us', lets: 'let us',
+  "isn't": 'is not', isnt: 'is not',
+  "aren't": 'are not', arent: 'are not',
+  "wasn't": 'was not', wasnt: 'was not',
+  "weren't": 'were not', werent: 'were not',
+  "don't": 'do not', dont: 'do not',
+  "doesn't": 'does not', doesnt: 'does not',
+  "didn't": 'did not', didnt: 'did not',
+  "haven't": 'have not', havent: 'have not',
+  "hasn't": 'has not', hasnt: 'has not',
+  "hadn't": 'had not', hadnt: 'had not',
+  "won't": 'will not', wont: 'will not',
+  "wouldn't": 'would not', wouldnt: 'would not',
+  "can't": 'cannot', cant: 'cannot',
+  "couldn't": 'could not', couldnt: 'could not',
+  "shouldn't": 'should not', shouldnt: 'should not',
+  "mustn't": 'must not', mustnt: 'must not',
+  "i've": 'i have', ive: 'i have',
+  "you've": 'you have', youve: 'you have',
+  "we've": 'we have', weve: 'we have',
+  "they've": 'they have', theyve: 'they have',
+  "i'll": 'i will', ill: 'i will',
+  "you'll": 'you will', youll: 'you will',
+  "he'll": 'he will', hell: 'he will',
+  "she'll": 'she will', shell: 'she will',
+  "it'll": 'it will', itll: 'it will',
+  "we'll": 'we will', well: 'we will',
+  "they'll": 'they will', theyll: 'they will',
+};
+
+// numerele în litere devin cifre pe AMBELE părți: "fifty" == "50"
+const NUM1 = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
+  seventeen: 17, eighteen: 18, nineteen: 19 };
+const NUM10 = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+
+function canon(str) {
+  const words = str.split(' ').filter(Boolean);
+  const out = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (NUM10[w] != null) {
+      const unit = NUM1[words[i + 1]];
+      if (unit != null && unit < 10) { out.push(String(NUM10[w] + unit)); i++; }
+      else out.push(String(NUM10[w]));
+    } else if (NUM1[w] != null) out.push(String(NUM1[w]));
+    else out.push(w);
+  }
+  return out.join(' ').replace(/\bcan not\b/g, 'cannot');
+}
+
+// toate scrierile echivalente ale unei propoziții: cu contracții, cu forme pline,
+// fără apostrofuri; 'd (would/had) generează ambele citiri
+function variantsOf(s) {
+  const base = norm(s);
+  const out = new Set();
+  out.add(canon(base));
+  out.add(canon(base.replace(/'/g, '')));
+  const exp = base.split(' ').map(w => EXPAND[w] || w).join(' ');
+  out.add(canon(exp));
+  out.add(canon(exp.replace(/'/g, '')));
+  if (base.includes("'d")) {
+    out.add(canon(base.replace(/'d\b/g, ' would')));
+    out.add(canon(base.replace(/'d\b/g, ' had')));
+  }
+  return [...out];
 }
 
 export function levenshtein(a, b) {
@@ -31,11 +115,10 @@ export function levenshtein(a, b) {
   return prev[n];
 }
 
-// verificare pentru răspuns scris: iertăm greșeli mici de tastare,
+// compararea de bază pe forme deja canonizate: iertăm greșeli mici de tastare,
 // dar cuvintele scurte de gramatică (am/is/he/she) trebuie să fie EXACTE —
 // altfel toleranța ar accepta exact greșelile pe care lecția vrea să le corecteze.
-export function checkTyped(input, target) {
-  const a = norm(input), b = norm(target);
+function cmpCore(a, b) {
   if (!a) return { ok: false, exact: false };
   if (a === b) return { ok: true, exact: true };
   const aw = a.split(' '), bw = b.split(' ');
@@ -56,6 +139,23 @@ export function checkTyped(input, target) {
   const tol = Math.max(1, Math.floor(b.length / 8));
   if (dist <= tol) return { ok: true, exact: false };
   return { ok: false, exact: false };
+}
+
+// verificare pentru răspuns scris: răspunsul e bun dacă ORICE scriere echivalentă
+// a lui se potrivește cu ORICE scriere echivalentă a cheii (sau a alternativelor ei).
+// "I'm", "Im" și "I am" sunt același răspuns; la fel "fifty" și "50".
+export function checkTyped(input, target, alts) {
+  const ins = variantsOf(input);
+  const keys = [target].concat(Array.isArray(alts) ? alts : []).filter(Boolean).flatMap(variantsOf);
+  let best = { ok: false, exact: false };
+  for (const k of keys) {
+    for (const a of ins) {
+      const r = cmpCore(a, k);
+      if (r.exact) return r;
+      if (r.ok) best = r;
+    }
+  }
+  return best;
 }
 
 // verificare pentru vorbire: suprapunere de cuvinte sau similaritate globală
