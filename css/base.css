@@ -231,7 +231,10 @@ button { font-family: inherit; }
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
   background: var(--bg); border-top: 2px solid var(--line);
   padding: 14px 16px calc(14px + var(--safe-b));
+  transition: transform .15s ease;
 }
+/* ridicata peste tastatura: marginea de siguranta a telefonului e sub tastatura, nu mai e nevoie de ea */
+.check-bar.lifted { padding-bottom: 12px; }
 .check-bar .inner { max-width: 620px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
 @media (min-width: 900px) { .check-bar .inner { max-width: 680px; } }
 .check-bar.ok { background: var(--success-bg); border-top-color: var(--success); }

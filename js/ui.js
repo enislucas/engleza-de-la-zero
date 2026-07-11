@@ -101,6 +101,31 @@ let inActivity = false; // dialog sau atelier de scriere în desfășurare
 
 export function isLessonActive() { return !!lessonState || inActivity; }
 
+// tastatura telefonului acoperă bara fixă cu VERIFICĂ: o ridicăm exact cât e tastatura,
+// urmărind fereastra vizuală (merge și pe Android, și pe iPhone)
+(function keyboardLift() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  let wasLifted = false;
+  const apply = () => {
+    const bar = document.querySelector('.check-bar');
+    if (!bar) { wasLifted = false; return; }
+    const lift = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    bar.style.transform = lift > 0 ? `translateY(${-lift}px)` : '';
+    bar.classList.toggle('lifted', lift > 0);
+    if ((lift > 0) !== wasLifted) {
+      wasLifted = lift > 0;
+      // câmpul de scris rămâne vizibil deasupra barei ridicate
+      const ae = document.activeElement;
+      if (wasLifted && ae && ae.classList && ae.classList.contains('type-in')) {
+        setTimeout(() => { try { ae.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} }, 80);
+      }
+    }
+  };
+  vv.addEventListener('resize', apply);
+  vv.addEventListener('scroll', apply);
+})();
+
 export function nav(route, arg) {
   navSeq++;
   inActivity = false;
@@ -429,6 +454,13 @@ async function renderHome() {
       path.appendChild(cNode);
     });
     sc.appendChild(path);
+  });
+  // harta se deschide direct la nivelul curent, nu la începutul drumului:
+  // fără derulat prin 24 de unități după fiecare lecție sau la deschiderea aplicației
+  requestAnimationFrame(() => {
+    const target = document.querySelector('.path-node.current')
+      || Array.from(document.querySelectorAll('.unit-head:not(.locked)')).pop();
+    if (target) { try { target.scrollIntoView({ block: 'center' }); } catch (_) {} }
   });
 }
 
