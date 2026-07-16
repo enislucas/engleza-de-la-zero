@@ -21,6 +21,8 @@ window.__logErr = function (msg) {
 let lastDay = todayStr();
 
 async function boot() {
+  // harta se poziționează singură la nivelul curent; restaurarea browserului ar trage-o înapoi
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (_) {}
   initSpeech();
   await load();
   // preîncarcă lecțiile în fundal (nu blocăm pornirea)

@@ -81,10 +81,18 @@ export function save(immediate = false) {
   if (!state.data) return;
   const doSave = () => {
     saveTimer = null;
+    // ștampila de timp: dacă una din cele două magazii refuză scrierea, la pornire
+    // o alegem pe cea mai nouă. Progresul unei lecții nu are voie să se piardă tăcut.
+    state.data.savedAt = Date.now();
     let json;
     try { json = JSON.stringify(state.data); } catch (_) { return; }
-    try { localStorage.setItem(LS_KEY, json); } catch (_) {}
-    idbSet(json); // async, best effort
+    let lsOk = true;
+    try { localStorage.setItem(LS_KEY, json); } catch (_) { lsOk = false; }
+    if (!lsOk) {
+      state.storageOk = false;
+      try { if (window.__logErr) window.__logErr('save: localStorage a refuzat scrierea'); } catch (_) {}
+    }
+    idbSet(json); // oglinda de siguranță (async, best effort)
   };
   if (immediate) { if (saveTimer) clearTimeout(saveTimer); doSave(); return; }
   if (saveTimer) return;
@@ -104,10 +112,11 @@ export async function load() {
   let raw = null;
   try { raw = localStorage.getItem(LS_KEY); } catch (_) {}
   let d = parseData(raw);
-  if (!d) {
-    // recuperare din oglinda IndexedDB dacă localStorage lipsește SAU e corupt
-    d = parseData(await idbGet());
-  }
+  // oglinda IndexedDB: ne salvează dacă localStorage lipsește, e corupt SAU e mai vechi
+  // (telefonul poate refuza tăcut scrierea în localStorage și progresul ar părea că dispare)
+  const mirror = parseData(await idbGet());
+  if (!d) d = mirror;
+  else if (mirror && (mirror.savedAt || 0) > (d.savedAt || 0)) d = mirror;
   if (d) {
     state.data = d;
     state.profile = d.profiles.find(p => p.id === d.active) || d.profiles[0] || null;

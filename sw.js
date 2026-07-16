@@ -5,15 +5,15 @@
 //    stale-while-revalidate: merg offline, se împrospătează pe net
 // La versiune nouă: deploy.sh schimbă VERSION → clientul primește banner "Actualizează".
 
-const VERSION = 'ezr-202607111512';
+const VERSION = 'ezr-202607160923';
 const DATA_CACHE = 'ezr-data-v1';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './css/base.css?v=202607111512',
-  './css/themes.css?v=202607111512',
-  './js/main.js?v=202607111512',
+  './css/base.css?v=202607160923',
+  './css/themes.css?v=202607160923',
+  './js/main.js?v=202607160923',
   './js/state.js',
   './js/ui.js',
   './js/engine.js',
@@ -31,6 +31,9 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
+  // versiunea nouă intră singură: părinții nu trebuie să apese nimic ca să primească
+  // reparațiile, iar o fereastră care nu se închide niciodată nu mai blochează actualizarea
+  self.skipWaiting();
   e.waitUntil(
     caches.open(VERSION)
       .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' }))))
@@ -56,27 +59,30 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
 
-  // datele lecțiilor: servim din cache imediat, împrospătăm în fundal
+  // datele lecțiilor: servim din cache imediat, împrospătăm în fundal.
+  // Orice defecțiune a magaziei de cache (telefon plin, stocare curățată de Android)
+  // NU are voie să omoare cererea: cădem pe rețea, ca lecțiile să se încarce oricum.
   if (url.pathname.includes('/data/')) {
-    e.respondWith(
-      caches.open(DATA_CACHE).then(async (c) => {
-        const cached = await c.match(req, { ignoreSearch: true });
-        const fetching = fetch(req).then((res) => {
-          if (res && res.ok) c.put(req, res.clone());
-          return res;
-        }).catch(() => null);
-        if (cached) return cached;
-        const fresh = await fetching;
-        // fără date și fără net: răspuns de eroare onest, ca aplicația să arate "reîncearcă"
-        return fresh || new Response('{"offline":true}', { status: 503, headers: { 'Content-Type': 'application/json' } });
-      })
-    );
+    e.respondWith((async () => {
+      let c = null;
+      try { c = await caches.open(DATA_CACHE); } catch (_) { c = null; }
+      let cached = null;
+      if (c) { try { cached = await c.match(req, { ignoreSearch: true }); } catch (_) { cached = null; } }
+      const fetching = fetch(req).then((res) => {
+        if (res && res.ok && c) { try { c.put(req, res.clone()); } catch (_) {} }
+        return res;
+      }).catch(() => null);
+      if (cached) return cached;
+      const fresh = await fetching;
+      // fără date și fără net: răspuns de eroare onest, ca aplicația să arate "reîncearcă"
+      return fresh || new Response('{"offline":true}', { status: 503, headers: { 'Content-Type': 'application/json' } });
+    })());
     return;
   }
 
   // shell: cache-first cu fallback pe rețea; navigări → index.html offline
   e.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
+    caches.match(req, { ignoreSearch: true }).catch(() => null).then((cached) => {
       if (cached) return cached;
       return fetch(req).then((res) => {
         if (res && res.ok && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname.endsWith('.png'))) {
@@ -85,7 +91,7 @@ self.addEventListener('fetch', (e) => {
         }
         return res;
       }).catch(() => {
-        if (req.mode === 'navigate') return caches.match('./index.html', { ignoreSearch: true });
+        if (req.mode === 'navigate') return caches.match('./index.html', { ignoreSearch: true }).catch(() => new Response('', { status: 504 }));
         return new Response('', { status: 504 });
       });
     })

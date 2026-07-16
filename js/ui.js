@@ -143,7 +143,8 @@ export function nav(route, arg) {
     else r = renderHome();
     // ecranele async: orice eroare scăpată ajunge tot la ecranul prietenos
     if (r && typeof r.catch === 'function') r.catch(renderCrash);
-    window.scrollTo(0, 0);
+    // harta își duce singură cursorul la nivelul curent; pe restul ecranelor începem de sus
+    if (route !== 'home') window.scrollTo(0, 0);
   } catch (err) {
     renderCrash(err);
   }
@@ -356,7 +357,9 @@ async function renderHome() {
   filtered.forEach((u, idx) => {
     const prog = unitProgress(p, u);
     const locked = idx > filteredCur;
-    const head = h('div', 'unit-head' + (locked ? ' locked' : ''));
+    // cur-unit = unitatea la care lucrează acum; ancoră de rezervă pentru derulare
+    // (când toate lecțiile sunt făcute și rămâne doar proba, nicio lecție nu e "current")
+    const head = h('div', 'unit-head' + (locked ? ' locked' : '') + (idx === filteredCur ? ' cur-unit' : ''));
     head.innerHTML = `<span class="u-ico">${esc(u.ico || '📘')}</span>
       <div><div class="u-t">${esc(u.title)}</div><div class="u-s">${esc(u.sub || '')} · ${esc(u.cefr || '')}</div></div>`;
     const gbtn = h('button', 'btn-guide', '📖');
@@ -455,13 +458,37 @@ async function renderHome() {
     });
     sc.appendChild(path);
   });
-  // harta se deschide direct la nivelul curent, nu la începutul drumului:
-  // fără derulat prin 24 de unități după fiecare lecție sau la deschiderea aplicației
-  requestAnimationFrame(() => {
-    const target = document.querySelector('.path-node.current')
+  stickToCurrentLevel();
+}
+
+// Harta se deschide direct la nivelul curent, nu la începutul drumului: fără derulat prin
+// 24 de unități după fiecare lecție sau la deschiderea aplicației.
+// Ținta se re-confirmă de câteva ori: pe telefon, așezarea paginii și restaurarea de derulare
+// a browserului pot veni după primul cadru și ne-ar trage înapoi sus. Ne oprim imediat ce
+// ei ating ecranul: dacă vor să caute altceva pe hartă, nu-i mai smucim înapoi.
+function stickToCurrentLevel() {
+  const seq = navSeq;
+  let stop = false;
+  const release = () => { stop = true; };
+  window.addEventListener('touchstart', release, { once: true, passive: true });
+  window.addEventListener('wheel', release, { once: true, passive: true });
+  window.addEventListener('keydown', release, { once: true });
+
+  const aim = () => {
+    if (stop || navSeq !== seq || currentRoute !== 'home') return;
+    const t = document.querySelector('.path-node.current')
+      || document.querySelector('.unit-head.cur-unit')
       || Array.from(document.querySelectorAll('.unit-head:not(.locked)')).pop();
-    if (target) { try { target.scrollIntoView({ block: 'center' }); } catch (_) {} }
-  });
+    if (!t) return;
+    const r = t.getBoundingClientRect();
+    const mid = window.innerHeight / 2;
+    if (Math.abs(r.top + r.height / 2 - mid) < 48) return; // deja e la mijloc
+    try { t.scrollIntoView({ block: 'center' }); }
+    catch (_) { window.scrollTo(0, Math.max(0, window.scrollY + r.top - mid)); }
+  };
+  aim();
+  requestAnimationFrame(aim);
+  [80, 250, 600, 1200].forEach(ms => setTimeout(aim, ms));
 }
 
 async function showGuide(unitMeta) {
