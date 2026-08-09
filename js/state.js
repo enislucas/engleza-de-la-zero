@@ -93,6 +93,7 @@ export function save(immediate = false) {
       try { if (window.__logErr) window.__logErr('save: localStorage a refuzat scrierea'); } catch (_) {}
     }
     idbSet(json); // oglinda de siguranță (async, best effort)
+    try { window.dispatchEvent(new Event('ezr-saved')); } catch (_) {} // sync-ul familiei ascultă
   };
   if (immediate) { if (saveTimer) clearTimeout(saveTimer); doSave(); return; }
   if (saveTimer) return;

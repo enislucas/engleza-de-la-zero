@@ -1,6 +1,7 @@
 // main.js — pornirea aplicației: stare, voci, service worker, plase de siguranță.
 
 import { load, state, todayStr, save, adoptExternal, applyPrefs } from './state.js';
+import { capturePairing, cloudPull, syncActive } from './sync.js';
 import { initSpeech } from './speech.js';
 import { startApp, renderOnboarding, toast, nav, isLessonActive, recenterMap } from './ui.js';
 import { syncStreak, syncQuests } from './gamify.js';
@@ -15,6 +16,8 @@ window.__logErr = function (msg) {
     log.push(new Date().toISOString() + ' ' + String(msg).slice(0, 300));
     while (log.length > 30) log.shift();
     localStorage.setItem(k, JSON.stringify(log));
+    // jurnalul calatoreste si cu progresul, ca Enis sa vada erorile de la distanta
+    if (state.data) state.data.errlog = log;
   } catch (_) {}
 };
 
@@ -23,8 +26,12 @@ let lastDay = todayStr();
 async function boot() {
   // harta se poziționează singură la nivelul curent; restaurarea browserului ar trage-o înapoi
   try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (_) {}
+  const paired = capturePairing(); // linkul de împerechere de la Enis, o singură dată
   initSpeech();
   await load();
+  // progresul mai nou din cutia familiei (alt telefon sau restaurare) se ia înainte de pornire
+  try { await cloudPull(); } catch (_) {}
+  if (paired) setTimeout(() => toast('✅ Sincronizarea familiei este activă', 5000), 1200);
   // preîncarcă lecțiile în fundal (nu blocăm pornirea)
   loadCourse().catch(() => {});
   window.__appStarted = true;
@@ -76,6 +83,10 @@ document.addEventListener('visibilitychange', () => {
     } catch (_) {}
   } else if (hiddenAt && Date.now() - hiddenAt > 10 * 60 * 1000) {
     try { recenterMap(); } catch (_) {}
+    // dupa o pauza lunga, verificam si cutia familiei (poate a salvat alt dispozitiv)
+    if (syncActive() && !isLessonActive()) {
+      cloudPull().then((changed) => { if (changed) { applyPrefs(); nav('home'); } }).catch(() => {});
+    }
   }
 });
 
