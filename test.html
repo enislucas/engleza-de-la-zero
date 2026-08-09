@@ -60,6 +60,29 @@ const ta = async (name, fn) => {
     t('checkTyped alternative acceptate', () => E.checkTyped('I like reading', 'I like to read.', ['I like reading.']).ok === true && E.checkTyped('I like reading', 'I like to read.').ok === false);
     t('checkTyped gramatica rămâne strictă', () => E.checkTyped('he am tired', 'He is tired.').ok === false && E.checkTyped('I is fine', 'I am fine.').ok === false);
     t('checkTyped cratima nu contează', () => E.checkTyped('ice cream', 'ice-cream').ok === true);
+
+    // ---- pasul curent pe hartă (regresie: bug-ul "Conversație La cafenea" al lui Onal) ----
+    t('currentStep: lecții → conversații → lecturi → scriere → probă → gata', () => {
+      const u = { lessonCount: 2, dlg: 2, rd: 1, wr: 1 };
+      const states = [
+        [{}, 'lesson'],
+        [{ done: 1 }, 'lesson'],
+        [{ done: 2 }, 'dlg'],
+        [{ done: 2, dlg: 1 }, 'dlg'],           // o conversație făcută din două: TOT aici e săgeata
+        [{ done: 2, dlg: 2 }, 'rd'],
+        [{ done: 2, dlg: 2, rd: 1 }, 'wr'],
+        [{ done: 2, dlg: 2, rd: 1, wr: 1 }, 'test'],
+        [{ done: 2, dlg: 2, rd: 1, wr: 1, test: true }, 'done'],
+      ];
+      return states.every(([s, k]) => C.currentStep(u, s).kind === k);
+    });
+    t('currentStep: unitate fără extra sare de la lecții la probă', () =>
+      C.currentStep({ lessonCount: 1 }, { done: 1 }).kind === 'test'
+      && C.currentStep({ lessonCount: 1 }, { done: 1, test: true }).kind === 'done');
+    t('currentStep: stare lipsă = prima lecție', () => {
+      const r = C.currentStep({ lessonCount: 5, dlg: 2 }, undefined);
+      return r.kind === 'lesson' && r.idx === 0;
+    });
     t('checkSpoken', () => E.checkSpoken(['i am tired'], 'I am tired.').ok === true && E.checkSpoken(['hello world'], 'I am tired.').ok === false);
     t('recordAnswer SRS up/down', () => {
       E.recordAnswer('wx', true);

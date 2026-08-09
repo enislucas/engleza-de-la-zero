@@ -63,6 +63,20 @@ export function unitProgress(profile, unitMeta) {
   return { done: st ? st.done : 0, test: st ? !!st.test : false, total: unitMeta.lessonCount };
 }
 
+// pasul curent al unei unități, în ordinea nodurilor de pe hartă:
+// lecțiile, apoi conversațiile, lecturile, scrierea și proba.
+// De aici știe harta EXACT ce nod poartă săgeata "CONTINUĂ" — inclusiv când
+// toate lecțiile sunt gata și lucrul curent e o conversație sau proba.
+export function currentStep(unitMeta, st) {
+  const s = st || {};
+  if ((s.done || 0) < unitMeta.lessonCount) return { kind: 'lesson', idx: s.done || 0 };
+  if ((unitMeta.dlg || 0) > (s.dlg || 0)) return { kind: 'dlg' };
+  if ((unitMeta.rd || 0) > (s.rd || 0)) return { kind: 'rd' };
+  if ((unitMeta.wr || 0) > (s.wr || 0)) return { kind: 'wr' };
+  if (!s.test) return { kind: 'test' };
+  return { kind: 'done' };
+}
+
 // prima unitate cu lecții nefăcute (unde e "săgeata")
 export function currentUnitIndex(profile, meta) {
   for (let i = 0; i < meta.units.length; i++) {

@@ -129,6 +129,8 @@ button { font-family: inherit; }
 }
 .lesson-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--primary-dk); }
 .lesson-btn.done { background: var(--gold); box-shadow: 0 5px 0 var(--gold-dk); color: #7a5800; }
+/* nod cu mai multe părți, început dar neterminat: jumătate auriu — se vede că ai avansat */
+.lesson-btn.part { background: linear-gradient(135deg, var(--gold) 0%, var(--gold) 45%, var(--primary) 55%, var(--primary) 100%); }
 .lesson-btn.locked { background: var(--locked); box-shadow: 0 5px 0 var(--locked-dk); color: var(--text2); cursor: default; }
 .lesson-btn.test { border-radius: 24px; width: 84px; }
 .lesson-btn .crown { position: absolute; top: -7px; right: -7px; font-size: 1rem; background: var(--card); border-radius: 50%; padding: 2px 4px; border: 2px solid var(--line); }

@@ -4,7 +4,7 @@
 import { state, save, todayStr, addProfile, switchProfile, applyPrefs, exportCode, importCode } from './state.js';
 import * as G from './gamify.js';
 import { TIERS, standings, syncLeague, daysLeftInWeek } from './league.js';
-import { loadCourse, loadUnit, loadStartedUnits, unitProgress } from './course.js';
+import { loadCourse, loadUnit, loadStartedUnits, unitProgress, currentStep } from './course.js';
 import { buildLesson, buildCrown, buildReview, recordAnswer, countDue, norm } from './engine.js';
 import { mountExercise, buildChipBank } from './exercises.js';
 import { mascotSvg, CHEERS, SOFT_WRONG, RETRY_SOON, pick } from './mascot.js';
@@ -357,6 +357,13 @@ async function renderHome() {
   filtered.forEach((u, idx) => {
     const prog = unitProgress(p, u);
     const locked = idx > filteredCur;
+    // pasul curent există DOAR în unitatea la care lucrează: nodul lui poartă săgeata,
+    // fie el lecție, conversație, lectură, scriere sau probă
+    const step = idx === filteredCur ? currentStep(u, p.game.units[u.id]) : null;
+    const markCurrent = (node, label) => {
+      node.classList.add('current');
+      node.appendChild(h('div', 'start-bubble', label || 'CONTINUĂ'));
+    };
     // cur-unit = unitatea la care lucrează acum; ancoră de rezervă pentru derulare
     // (când toate lecțiile sunt făcute și rămâne doar proba, nicio lecție nu e "current")
     const head = h('div', 'unit-head' + (locked ? ' locked' : '') + (idx === filteredCur ? ' cur-unit' : ''));
@@ -387,9 +394,7 @@ async function renderHome() {
         b.appendChild(badge);
       }
       if (isCurrent) {
-        node.classList.add('current');
-        const bub = h('div', 'start-bubble', prog.done === 0 && idx === 0 && p.game.stats.lessons === 0 ? 'ÎNCEPE AICI' : 'CONTINUĂ');
-        node.appendChild(bub);
+        markCurrent(node, prog.done === 0 && idx === 0 && p.game.stats.lessons === 0 ? 'ÎNCEPE AICI' : 'CONTINUĂ');
       }
       if (!isLocked || done) {
         b.addEventListener('click', () => {
@@ -402,45 +407,34 @@ async function renderHome() {
       path.appendChild(node);
     }
     // dialog (după jumătate din lecții) și scriere (după toate lecțiile)
-    if (u.dlg > 0) {
-      const dNode = h('div', 'path-node');
-      const dDone = (p.game.units[u.id] && p.game.units[u.id].dlg) || 0;
-      const dUnlocked = !locked && prog.done >= Math.ceil(u.lessonCount / 2);
-      const db = h('button', 'lesson-btn' + (dDone >= u.dlg ? ' done' : !dUnlocked ? ' locked' : ''));
-      db.innerHTML = dDone >= u.dlg ? '💬' : dUnlocked ? '💬' : '🔒';
-      if (dUnlocked) db.addEventListener('click', () => startDialog(u));
-      dNode.appendChild(db);
-      dNode.appendChild(h('div', 'lesson-label', 'Conversație'));
-      path.appendChild(dNode);
-    }
-    if (u.rd > 0) {
-      const rNode = h('div', 'path-node');
-      const rDone = (p.game.units[u.id] && p.game.units[u.id].rd) || 0;
-      const rUnlocked = !locked && prog.done >= Math.ceil(u.lessonCount * 0.75);
-      const rb = h('button', 'lesson-btn' + (rDone >= u.rd ? ' done' : !rUnlocked ? ' locked' : ''));
-      rb.innerHTML = rUnlocked || rDone >= u.rd ? '📖' : '🔒';
-      if (rUnlocked) rb.addEventListener('click', () => startReading(u));
-      rNode.appendChild(rb);
-      rNode.appendChild(h('div', 'lesson-label', 'Lectură'));
-      path.appendChild(rNode);
-    }
-    if (u.wr > 0) {
-      const wNode = h('div', 'path-node');
-      const wDone = (p.game.units[u.id] && p.game.units[u.id].wr) || 0;
-      const wUnlocked = !locked && prog.done >= u.lessonCount;
-      const wb = h('button', 'lesson-btn' + (wDone >= u.wr ? ' done' : !wUnlocked ? ' locked' : ''));
-      wb.innerHTML = wDone >= u.wr ? '✍️' : wUnlocked ? '✍️' : '🔒';
-      if (wUnlocked) wb.addEventListener('click', () => startWriting(u));
-      wNode.appendChild(wb);
-      wNode.appendChild(h('div', 'lesson-label', 'Scriere'));
-      path.appendChild(wNode);
-    }
+    // nodurile cu mai multe părți (conversații, lecturi, scrieri) își arată progresul:
+    // eticheta numără 1/4, 2/4..., iar butonul e pe jumătate auriu cât timp e la mijloc.
+    // Fără asta, tata termină o conversație și nodul rămâne neschimbat — pare stricat.
+    const partNode = (kind, count, doneCount, unlocked, icon, name, onClick) => {
+      const nd = h('div', 'path-node');
+      const full = doneCount >= count;
+      const b = h('button', 'lesson-btn' + (full ? ' done' : !unlocked ? ' locked' : doneCount > 0 ? ' part' : ''));
+      b.innerHTML = unlocked || full ? icon : '🔒';
+      if (unlocked) b.addEventListener('click', onClick);
+      if (step && step.kind === kind) markCurrent(nd);
+      nd.appendChild(b);
+      nd.appendChild(h('div', 'lesson-label', name + (count > 1 ? ` ${Math.min(doneCount, count)}/${count}` : '')));
+      path.appendChild(nd);
+    };
+    const st0 = p.game.units[u.id] || {};
+    if (u.dlg > 0) partNode('dlg', u.dlg, st0.dlg || 0,
+      !locked && prog.done >= Math.ceil(u.lessonCount / 2), '💬', 'Conversație', () => startDialog(u));
+    if (u.rd > 0) partNode('rd', u.rd, st0.rd || 0,
+      !locked && prog.done >= Math.ceil(u.lessonCount * 0.75), '📖', 'Lectură', () => startReading(u));
+    if (u.wr > 0) partNode('wr', u.wr, st0.wr || 0,
+      !locked && prog.done >= u.lessonCount, '✍️', 'Scriere', () => startWriting(u));
     // proba unității
     const tnode = h('div', 'path-node');
     const testUnlocked = !locked && prog.done >= u.lessonCount;
     const tb = h('button', 'lesson-btn test' + (prog.test ? ' done' : !testUnlocked ? ' locked' : ''));
     tb.innerHTML = prog.test ? '👑' : testUnlocked ? '🏁' : '🔒';
     if (testUnlocked || prog.test) tb.addEventListener('click', () => startLesson(u, -1, { test: true, redo: prog.test }));
+    if (step && step.kind === 'test') markCurrent(tnode);
     tnode.appendChild(tb);
     tnode.appendChild(h('div', 'lesson-label', 'Proba unității'));
     path.appendChild(tnode);
@@ -466,6 +460,11 @@ async function renderHome() {
 // Ținta se re-confirmă de câteva ori: pe telefon, așezarea paginii și restaurarea de derulare
 // a browserului pot veni după primul cadru și ne-ar trage înapoi sus. Ne oprim imediat ce
 // ei ating ecranul: dacă vor să caute altceva pe hartă, nu-i mai smucim înapoi.
+// la revenirea în aplicație după o pauză: harta se re-așază pe nivelul curent
+export function recenterMap() {
+  if (currentRoute === 'home' && !isLessonActive()) stickToCurrentLevel();
+}
+
 function stickToCurrentLevel() {
   const seq = navSeq;
   let stop = false;
@@ -488,7 +487,8 @@ function stickToCurrentLevel() {
   };
   aim();
   requestAnimationFrame(aim);
-  [80, 250, 600, 1200].forEach(ms => setTimeout(aim, ms));
+  // pe telefon, așezarea paginii se poate mișca și târziu; re-țintim mai mult timp
+  [80, 250, 600, 1200, 2500].forEach(ms => setTimeout(aim, ms));
 }
 
 async function showGuide(unitMeta) {

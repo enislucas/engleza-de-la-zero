@@ -2,7 +2,7 @@
 
 import { load, state, todayStr, save, adoptExternal, applyPrefs } from './state.js';
 import { initSpeech } from './speech.js';
-import { startApp, renderOnboarding, toast, nav, isLessonActive } from './ui.js';
+import { startApp, renderOnboarding, toast, nav, isLessonActive, recenterMap } from './ui.js';
 import { syncStreak, syncQuests } from './gamify.js';
 import { syncLeague } from './league.js';
 import { loadCourse } from './course.js';
@@ -58,8 +58,12 @@ function syncBadge() {
 }
 
 // La revenirea în aplicație (a doua zi): resincronizăm seria/misiunile.
+// Aplicația instalată nu se închide aproape niciodată: "deschiderea" e de fapt o revenire.
+// După o pauză mai lungă, harta se re-așază singură pe nivelul curent.
+let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || !state.profile) return;
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  if (!state.profile) return;
   syncBadge();
   const today = todayStr();
   if (today !== lastDay) {
@@ -70,6 +74,8 @@ document.addEventListener('visibilitychange', () => {
       syncLeague(state.profile);
       nav('home');
     } catch (_) {}
+  } else if (hiddenAt && Date.now() - hiddenAt > 10 * 60 * 1000) {
+    try { recenterMap(); } catch (_) {}
   }
 });
 
