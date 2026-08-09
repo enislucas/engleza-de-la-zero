@@ -324,6 +324,32 @@ button { font-family: inherit; }
 .cal .c-d.hit { background: var(--gold); color: #7a5800; }
 .cal .c-d.frozen { background: var(--accent-bg); color: var(--accent-text); }
 
+/* ---------- Barza de buzunar ---------- */
+.b-ro { color: var(--ro, #7a5cc4); font-style: italic; }
+.b-chat { display: flex; flex-direction: column; gap: 12px; padding: 6px 0 150px; }
+.b-chat .msg { max-width: 88%; }
+.b-composer { position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + var(--safe-b)); z-index: 150;
+  display: flex; gap: 8px; align-items: flex-end; padding: 8px 12px;
+  background: var(--bg); border-top: 2px solid var(--line); transition: transform .15s ease; }
+.b-in { flex: 1; border: 2px solid var(--line); border-radius: 16px; padding: 11px 14px;
+  background: var(--card); color: var(--text); resize: none; max-height: 110px; font-size: 1.05rem; }
+.b-in:focus { outline: none; border-color: var(--accent); }
+.b-send, .b-mic { min-width: 48px; min-height: 48px; border-radius: 50%;
+  font-size: 1.2rem; cursor: pointer; background: var(--card); border: 2px solid var(--line); }
+.b-send { background: var(--primary); color: var(--on-primary); border: none; font-weight: 800; }
+.b-mic.rec { background: #ffe3e3; border-color: #e05555; animation: pulse 1s infinite; }
+.b-shelf { margin-bottom: 10px; }
+.b-shelf-t { font-weight: 800; font-size: .95rem; margin-bottom: 6px; }
+.b-vid { display: block; width: 100%; text-align: left; margin-top: 6px; min-height: 48px;
+  border: 2px solid var(--line); border-radius: 14px; background: var(--card); color: var(--text);
+  cursor: pointer; padding: 0 14px; font-weight: 700; }
+.b-video-ov { position: fixed; inset: 0; z-index: 900; background: #000;
+  display: flex; align-items: center; justify-content: center; }
+.b-video-ov video { width: 100%; max-height: 100%; }
+.b-video-x { position: absolute; top: 14px; right: 14px; z-index: 901; width: 46px; height: 46px;
+  border-radius: 50%; border: none; background: rgba(255,255,255,.25); color: #fff;
+  font-size: 1.2rem; cursor: pointer; }
+
 /* ---------- modal & toast ---------- */
 .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 800; display: flex; align-items: flex-end; justify-content: center; animation: fadein .18s ease; }
 @media (min-width: 700px) { .modal-back { align-items: center; } }

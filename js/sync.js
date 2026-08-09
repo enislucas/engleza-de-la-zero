@@ -12,21 +12,44 @@ try { cfg = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (_) {}
 
 export function syncActive() { return !!(cfg && cfg.url && cfg.box && cfg.key); }
 
-// linkul de împerechere: #pair=base64url("https://cutie|box|cheie")
+// linkul de împerechere: #pair=base64url("https://cutie|box|cheie") — 3 părți pentru sync,
+// sau 7 pentru sync + Barza de buzunar: url|box|cheie|cutiaTutorelui|cheiaTutorelui|cheiaGemini|cine
 export function capturePairing() {
   const m = (location.hash || '').match(/#?pair=([A-Za-z0-9_-]+)/);
   if (!m) return false;
   try {
     const parts = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')).split('|');
     const urlOk = /^https:\/\//.test(parts[0]) || /^http:\/\/(127\.0\.0\.1|localhost)/.test(parts[0]);
-    if (parts.length === 3 && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
+    if ((parts.length === 3 || parts.length === 7) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
       cfg = { url: parts[0].replace(/\/+$/, ''), box: parts[1], key: parts[2] };
+      if (parts.length === 7) {
+        cfg.tbox = parts[3]; cfg.tkey = parts[4]; cfg.gkey = parts[5]; cfg.who = parts[6];
+      }
       localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
       history.replaceState(null, '', location.pathname + location.search);
       return true;
     }
   } catch (_) {}
   return false;
+}
+
+// configurația Barzei de buzunar (dacă linkul de împerechere a adus-o)
+export function tutorCfg() {
+  return (cfg && cfg.gkey) ? cfg : null;
+}
+
+// deschide și decriptează o cutie oarecare (folosit pentru pachetul tutorelui: memoria)
+export async function openBox(box, keyB64) {
+  if (!cfg || !cfg.url) return null;
+  try {
+    const r = await fetch(cfg.url + '/drop/' + box);
+    if (!r.ok) return null;
+    const [ivb, ctb] = (await r.text()).split('.');
+    const raw = b64ToBuf(keyB64.replace(/-/g, '+').replace(/_/g, '/'));
+    const k = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBuf(ivb) }, k, b64ToBuf(ctb));
+    return JSON.parse(new TextDecoder().decode(pt));
+  } catch (_) { return null; }
 }
 
 function bufToB64(buf) {

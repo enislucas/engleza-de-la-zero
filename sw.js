@@ -5,17 +5,18 @@
 //    stale-while-revalidate: merg offline, se împrospătează pe net
 // La versiune nouă: deploy.sh schimbă VERSION → clientul primește banner "Actualizează".
 
-const VERSION = 'ezr-202608091639';
+const VERSION = 'ezr-202608091947';
 const DATA_CACHE = 'ezr-data-v1';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './css/base.css?v=202608091639',
-  './css/themes.css?v=202608091639',
-  './js/main.js?v=202608091639',
+  './css/base.css?v=202608091947',
+  './css/themes.css?v=202608091947',
+  './js/main.js?v=202608091947',
   './js/state.js',
   './js/sync.js',
+  './js/barza.js',
   './js/ui.js',
   './js/engine.js',
   './js/exercises.js',

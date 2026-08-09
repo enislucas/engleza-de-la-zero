@@ -10,6 +10,7 @@ import { mountExercise, buildChipBank } from './exercises.js';
 import { mascotSvg, CHEERS, SOFT_WRONG, RETRY_SOON, pick } from './mascot.js';
 import { speak, ttsAvailable, sttAvailable, stopSpeaking, listEnVoices, refreshVoice } from './speech.js';
 import { sfx } from './sound.js';
+import { renderBarza } from './barza.js';
 
 const $app = () => document.getElementById('app');
 
@@ -79,6 +80,7 @@ function navbar(active) {
   const items = [
     ['home', '🏠', 'Învață'],
     ['practice', '💪', 'Exersează'],
+    ['barza', '🦢', 'Barza'],
     ['league', '🏆', 'Liga'],
     ['quests', '🎯', 'Misiuni'],
     ['profile', '👤', 'Profil'],
@@ -108,7 +110,7 @@ export function isLessonActive() { return !!lessonState || inActivity; }
   if (!vv) return;
   let wasLifted = false;
   const apply = () => {
-    const bar = document.querySelector('.check-bar');
+    const bar = document.querySelector('.check-bar') || document.querySelector('.b-composer');
     if (!bar) { wasLifted = false; return; }
     const lift = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
     bar.style.transform = lift > 0 ? `translateY(${-lift}px)` : '';
@@ -140,6 +142,7 @@ export function nav(route, arg) {
     else if (route === 'league') r = renderLeague();
     else if (route === 'quests') r = renderQuests();
     else if (route === 'profile') r = renderProfile();
+    else if (route === 'barza') r = renderBarza({ $app, statbar, navbar });
     else r = renderHome();
     // ecranele async: orice eroare scăpată ajunge tot la ecranul prietenos
     if (r && typeof r.catch === 'function') r.catch(renderCrash);
