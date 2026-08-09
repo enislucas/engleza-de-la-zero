@@ -103,8 +103,19 @@ export async function cloudPull() {
       await aesKey(), b64ToBuf(ctb));
     const d = JSON.parse(new TextDecoder().decode(pt));
     if (d && Array.isArray(d.profiles)) {
+      // garda identitatii: o stare STRAINA (alt profil) nu are voie sa inlocuiasca
+      // munca reala de pe acest telefon. Adoptarea unui profil strain e permisa doar
+      // cand telefonul e practic gol (restaurare pe telefon nou / dupa reinstalare).
+      const localP = state.profile;
+      const remoteP = d.profiles.find(p => p.id === d.active) || d.profiles[0];
+      const foreign = localP && remoteP && localP.id !== remoteP.id;
+      const localLessons = (localP && localP.game && localP.game.stats && localP.game.stats.lessons) || 0;
+      if (foreign && localLessons >= 3) {
+        try { if (window.__logErr) window.__logErr('sync: stare straina in cutie refuzata (protejam progresul local)'); } catch (_) {}
+        return false;
+      }
       state.data = d;
-      state.profile = d.profiles.find(p => p.id === d.active) || d.profiles[0] || null;
+      state.profile = remoteP || null;
       save(true);
       return true;
     }
