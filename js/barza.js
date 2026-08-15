@@ -77,21 +77,29 @@ async function distillMemory(msgs) {
     if (Date.now() - ((p.tutorMemory && p.tutorMemory.lastDistillAt) || 0) < 2 * 3600 * 1000) return;
     const old = (p.tutorMemory && p.tutorMemory.text) || '';
     const today = todayStr();
+    const name = p.name || 'cursantul';
+    const pron = cfg.who === 'dad' ? 'el (bărbat, folosește „el/lui”)'
+      : cfg.who === 'mom' ? 'ea (femeie, folosește „ea/ei”)' : 'persoana';
     const transcript = msgs
       .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => (m.role === 'user' ? (p.name || 'Cursant') : 'Barza') + ': ' + String(m.content).slice(0, 400))
+      .map(m => (m.role === 'user' ? name : 'Barza') + ': ' + String(m.content).slice(0, 400))
       .join('\n').slice(0, 6000);
-    const prompt = `Ești memoria unui profesor de engleză pentru un cursant român adult (${p.name || 'cursant'}). Actualizează notițele de mai jos cu ce e nou din conversația de azi. Structură FIXĂ, în română, rânduri simple, fără markdown (fără asteriscuri sau titluri):
-DESPRE EL: fapte personale (familie, muncă, planuri, orașe, preferințe).
-GRESELI: fiecare greșeală de engleză care se repetă, pe un rând, cu data între paranteze. Folosește data ${today} pentru cele noi de azi; PĂSTREAZĂ datele vechi. Dacă o greșeală nu mai apare de mult, poți s-o scoți.
+    const prompt = `Ești memoria unui profesor de engleză. Cursantul este ${name} (${pron}).
+Actualizează notițele cu ce e NOU din conversația de azi. REGULI STRICTE:
+- Scrie DOAR fapte pe care ${name} le-a spus EXPLICIT (azi sau în notițele vechi). NU inventa, NU ghici, NU presupune NIMIC despre familie, copii, oraș, muncă sau vârstă. Dacă azi nu s-a spus nimic personal nou, lasă secțiunea DESPRE exact cum era (sau goală).
+- Folosește pronumele corect: ${pron}.
+- Nu copia exemple; scrie doar realitatea din conversație.
+Structură FIXĂ, în română, rânduri simple, fără markdown:
+DESPRE: fapte personale spuse clar de ${name} (familie, muncă, oraș, preferințe).
+GRESELI: fiecare greșeală de engleză care se repetă, pe un rând, cu data între paranteze. Data ${today} pentru cele noi; păstrează datele vechi reale.
 S-A EXERSAT: pe scurt.
 PROMISIUNI: ce a promis profesorul.
-Rămâi SCURT și LIZIBIL: maxim 18 rânduri în total; comasează, nu îngroșa lista la infinit.
+Maxim 18 rânduri. Dacă notițele vechi conțin ceva ce pare inventat sau nesigur, elimină-l.
 
-NOTITE VECHI:
+NOTIȚE VECHI:
 ${old.slice(0, 2000)}
 
-CONVERSATIA DE AZI:
+CONVERSAȚIA DE AZI:
 ${transcript}
 
 Răspunde DOAR cu notițele actualizate.`;
