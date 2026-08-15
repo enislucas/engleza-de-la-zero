@@ -372,19 +372,20 @@ async function renderHome() {
       const behind = printedBook
         ? `Ești la Cartea ${appBook} în aplicație, dar la Cartea ${printedBook} pe hârtie.`
         : `Ești la Cartea ${appBook} în aplicație, dar cărțile tipărite încă nu sunt începute.`;
-      const nc = h('div', 'card nudge-barza');
-      nc.innerHTML = `<div class="row"><span style="font-size:1.7rem">🦢</span>
-        <div class="grow"><b>Nu te grăbi — fă engleza să rămână</b>
-        <div class="set-d">${behind} Engleza se lipește când consolidezi: <b>reia lecțiile vechi până ies perfect</b>, <b>recitește din cărți</b> și <b>vorbește cu Profesorul Barza</b> despre ce înveți. Ai o întrebare de gramatică? Întreabă-l, îți spune și din ce carte să recitești.</div></div>`;
-      const row = h('div', 'row mt8');
-      const go = h('button', 'btn btn-primary grow', '🦢 Vorbește cu Barza');
-      const later = h('button', 'btn', 'Mai târziu');
-      const dismiss = () => { p.barzaNudgeAt = todayStr(); save(true); };
-      go.addEventListener('click', () => { dismiss(); nav('barza'); });
-      later.addEventListener('click', () => { dismiss(); nc.remove(); });
-      row.appendChild(go); row.appendChild(later);
-      nc.appendChild(row);
-      sc.appendChild(nc);
+      p.barzaNudgeAt = todayStr(); save(true);           // marcăm o dată la 3 zile, chiar dacă doar o închid
+      // POP-UP peste tot ecranul (nu în capul hărții — sunt la unitatea 2, n-ar derula până sus)
+      setTimeout(() => {
+        if (currentRoute !== 'home') return;
+        const body = h('div');
+        body.innerHTML = `<div class="tc" style="font-size:2.4rem">🦢</div>
+          <p class="sub">${behind} Engleza se lipește când consolidezi: <b>reia lecțiile vechi până ies perfect</b>, <b>recitește din cărți</b> și <b>vorbește cu Profesorul Barza</b>. Ai o întrebare de gramatică? Întreabă-l, îți spune și din ce carte să recitești.</p>`;
+        const go = h('button', 'btn btn-primary btn-big mt8', '🦢 Vorbește cu Barza');
+        const later = h('button', 'btn btn-big mt8', 'Mai târziu');
+        body.appendChild(go); body.appendChild(later);
+        const back = modal('Nu te grăbi — fă engleza să rămână', body);
+        go.addEventListener('click', () => { back.remove(); nav('barza'); });
+        later.addEventListener('click', () => back.remove());
+      }, 800);
     }
   }
   filtered.forEach((u, idx) => {
