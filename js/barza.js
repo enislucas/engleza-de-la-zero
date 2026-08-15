@@ -408,7 +408,7 @@ function speakReply(raw) {
 async function videoShelf(cfgAll) {
   const wrap = h('div', 'b-shelf');
   try {
-    const r = await fetch(`${cfgAll.url}/media/${cfgAll.box}/list`);
+    const r = await fetch(`${cfgAll.url}/media/${cfgAll.box}/list`, { cache: 'no-store' });
     const all = await r.json();
     // grupam pe EPISOD (ep1.mp4/.mp3/.txt = un singur episod), nu pe fisier
     const groups = {};
@@ -431,7 +431,7 @@ async function videoShelf(cfgAll) {
       const card = h('div', 'b-vid-card');
       card.appendChild(h('div', 'b-vid-title', esc(decodeURIComponent(ep.title || 'Episod'))));
       const row = h('div', 'b-vid-row');
-      const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}`;
+      const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}?t=${ep.stamp || 0}`;  // busting cache
       if (ep.files.mp3) {   // experienta bogata: audio + text sincron + traducere pe cuvant
         const a = h('button', 'b-vid-btn', '🎧 Ascultă și citește');
         a.addEventListener('click', () => openReader(cfgAll, ep));
@@ -506,7 +506,7 @@ function openVideo(src) {
 
 // ---------- cititorul: audio + text sincron (karaoke) + traducere pe cuvant ----------
 async function openReader(cfgAll, ep) {
-  const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}`;
+  const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}?t=${ep.stamp || 0}`;  // busting cache
   const ov = h('div', 'b-read-ov');
   const card = h('div', 'b-read-card');
   const head = h('div', 'b-read-head');
