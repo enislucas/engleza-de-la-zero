@@ -1,11 +1,12 @@
 // barza.js — Barza de buzunar: profesorul, direct pe telefon, oriunde.
 // Vorbește cu Gemini folosind cheia primită prin linkul de împerechere (doar pe acest
-// telefon), își amintește omul din memoria distilată de laptop (prin cutia poștală),
-// iar conversațiile pleacă înapoi prin sincronizare, ca profesorul de acasă și panoul
-// lui Enis să le vadă. Ultimele 3 podcasturi stau pe raftul video, vizionabile oricând.
+// telefon). Își amintește omul din memoria pe care o distilează SINGUR, pe telefon, la
+// schimbarea zilei (fără laptop); memoria de la laptop rămâne doar rezervă. Conversațiile
+// și memoria pleacă prin sincronizare, ca profesorul de acasă și panoul lui Enis să le
+// vadă. Ultimele 3 podcasturi stau pe raftul video, vizionabile oricând.
 
 import { state, save, todayStr } from './state.js';
-import { tutorCfg, openBox } from './sync.js';
+import { tutorCfg, openBox, cloudPush, syncActive } from './sync.js';
 import { loadCourse, currentUnitIndex } from './course.js';
 import { speak, stopSpeaking, sttAvailable, listenOnce, stopListening } from './speech.js';
 
@@ -37,10 +38,55 @@ async function fetchMemory() {
 function chatStore() {
   const p = state.profile;
   if (!p.tutorChat) p.tutorChat = { day: todayStr(), messages: [] };
-  // in fiecare zi, conversatie noua: contextul (si costul) repornesc. Ziua veche a plecat
-  // deja prin sincronizare spre laptop, care o pastreaza in memoria profesorului.
-  if (p.tutorChat.day !== todayStr()) p.tutorChat = { day: todayStr(), messages: [] };
+  // in fiecare zi, conversatie noua: contextul (si costul) repornesc. INAINTE de a arunca
+  // ziua veche, o distilam in memorie chiar pe telefon (fara laptop), ca profesorul sa-si
+  // aminteasca omul de la o zi la alta.
+  if (p.tutorChat.day !== todayStr()) {
+    const old = p.tutorChat;
+    p.tutorChat = { day: todayStr(), messages: [] };
+    save();
+    if (old.messages && old.messages.length >= 2) distillMemory(old.messages); // fire-and-forget
+  }
   return p.tutorChat;
+}
+
+// ---------- memoria distilata PE TELEFON (fara laptop) ----------
+// La schimbarea zilei, Gemini rescrie cateva randuri durabile despre om + greselile cu
+// data, exact ca profesorul de acasa. Best-effort: daca esueaza, reincercam maine.
+async function distillMemory(msgs) {
+  try {
+    const cfg = tutorCfg();
+    if (!cfg || !cfg.gkey) return;                 // fara cheie (neimperecheat): sarim
+    const p = state.profile;
+    const old = (p.tutorMemory && p.tutorMemory.text) || '';
+    const today = todayStr();
+    const transcript = msgs
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => (m.role === 'user' ? (p.name || 'Cursant') : 'Barza') + ': ' + String(m.content).slice(0, 400))
+      .join('\n').slice(0, 6000);
+    const prompt = `Ești memoria unui profesor de engleză pentru un cursant român adult (${p.name || 'cursant'}). Actualizează notițele de mai jos cu ce e nou din conversația de azi. Structură FIXĂ, în română, rânduri simple, fără markdown (fără asteriscuri sau titluri):
+DESPRE EL: fapte personale (familie, muncă, planuri, orașe, preferințe).
+GRESELI: fiecare greșeală de engleză care se repetă, pe un rând, cu data între paranteze. Folosește data ${today} pentru cele noi de azi; PĂSTREAZĂ datele vechi. Dacă o greșeală nu mai apare de mult, poți s-o scoți.
+S-A EXERSAT: pe scurt.
+PROMISIUNI: ce a promis profesorul.
+Rămâi SCURT și LIZIBIL: maxim 18 rânduri în total; comasează, nu îngroșa lista la infinit.
+
+NOTITE VECHI:
+${old.slice(0, 2000)}
+
+CONVERSATIA DE AZI:
+${transcript}
+
+Răspunde DOAR cu notițele actualizate.`;
+    const { text, usage } = await callGemini(prompt, [{ role: 'user', content: 'Rescrie notițele acum.' }],
+      { temp: 0.3, maxTokens: 700 });
+    addCost(usage);
+    if (text && text.trim()) {
+      p.tutorMemory = { text: text.trim(), day: today };
+      save();
+      try { if (syncActive()) cloudPush(); } catch (_) {}   // impinge memoria in cutie, pt. panou
+    }
+  } catch (_) { /* best-effort */ }
 }
 function pushMsg(role, content) {
   const c = chatStore();
@@ -72,7 +118,9 @@ async function systemPrompt() {
     const meta = await loadCourse();
     appLevel = meta.units[currentUnitIndex(p, meta)].book;
   } catch (_) {}
-  const mem = await fetchMemory();
+  // memoria distilata pe telefon are prioritate; cea de la laptop e rezerva (continuitate)
+  const localMem = (p.tutorMemory && p.tutorMemory.text) || '';
+  const mem = localMem ? { text: localMem } : await fetchMemory();
   const bp = p.bookProgress || {};
   const bookLine = bp.book
     ? `They are reading the PRINTED book series (separate from the app, at their own pace): currently Book ${bp.book} of 24${bp.note ? ', ' + bp.note : ''}. Pitch what you reference to what they have actually read on paper.`
@@ -86,7 +134,7 @@ ${mem.text ? '\nWhat you remember about this learner from previous days (use it 
 }
 
 // ---------- apelul Gemini (NEfluxat: robust pe iPhone, unde fetch-ul in flux e capricios) ----------
-async function callGemini(sys, history) {
+async function callGemini(sys, history, opts = {}) {
   const cfg = tutorCfg();
   const contents = history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
   const res = await fetch(GURL, {
@@ -95,7 +143,7 @@ async function callGemini(sys, history) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: sys }] },
       contents,
-      generationConfig: { temperature: 0.8, maxOutputTokens: 500, thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: { temperature: opts.temp ?? 0.8, maxOutputTokens: opts.maxTokens ?? 500, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
   if (!res.ok) {
