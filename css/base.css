@@ -326,8 +326,18 @@ button { font-family: inherit; }
 
 /* ---------- Barza de buzunar ---------- */
 .b-ro { color: var(--ro, #7a5cc4); font-style: italic; }
-.b-chat { display: flex; flex-direction: column; gap: 12px; padding: 6px 0 150px; }
-.b-chat .msg { max-width: 88%; }
+.b-chat { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 150px; }
+.b-chat .msg { max-width: 82%; padding: 11px 15px; border-radius: 18px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+/* mesajul lor: dreapta, plin, colorat */
+.b-chat .msg.user { align-self: flex-end; background: var(--primary); color: var(--on-primary);
+  border-bottom-right-radius: 5px; }
+/* profesorul: stanga, card, cu botul de barza deasupra */
+.b-chat .msg.tutor { align-self: flex-start; background: var(--card); border: 1.5px solid var(--line);
+  border-bottom-left-radius: 5px; position: relative; margin-top: 16px; }
+.b-chat .msg.tutor::before { content: '🦢 Profesorul'; position: absolute; top: -16px; left: 4px;
+  font-size: .72rem; font-weight: 700; color: var(--fog); }
+.b-chat .corr { align-self: flex-start; max-width: 82%; }
 .b-composer { position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + var(--safe-b)); z-index: 150;
   display: flex; gap: 8px; align-items: flex-end; padding: 8px 12px;
   background: var(--bg); border-top: 2px solid var(--line); transition: transform .15s ease; }

@@ -9,7 +9,8 @@ import { tutorCfg, openBox } from './sync.js';
 import { loadCourse, currentUnitIndex } from './course.js';
 import { speak, stopSpeaking, sttAvailable, listenOnce, stopListening } from './speech.js';
 
-const GURL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse';
+// NEfluxat (generateContent, nu streamGenerateContent): un singur JSON, robust pe iPhone
+const GURL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 const h = (tag, cls, html) => {
   const el = document.createElement(tag);
@@ -36,13 +37,30 @@ async function fetchMemory() {
 function chatStore() {
   const p = state.profile;
   if (!p.tutorChat) p.tutorChat = { day: todayStr(), messages: [] };
+  // in fiecare zi, conversatie noua: contextul (si costul) repornesc. Ziua veche a plecat
+  // deja prin sincronizare spre laptop, care o pastreaza in memoria profesorului.
+  if (p.tutorChat.day !== todayStr()) p.tutorChat = { day: todayStr(), messages: [] };
   return p.tutorChat;
 }
 function pushMsg(role, content) {
   const c = chatStore();
-  c.day = todayStr();
   c.messages.push({ role, content: String(content).slice(0, 2000) });
   while (c.messages.length > 40) c.messages.shift();
+  save();
+}
+
+// ---------- plafon de cost pe zi, pe persoana (ca sa nu se abuzeze API-ul) ----------
+const DAILY_CAP_USD = 1.5;
+function costStore() {
+  const p = state.profile;
+  if (!p.tutorCost || p.tutorCost.day !== todayStr()) p.tutorCost = { day: todayStr(), usd: 0 };
+  return p.tutorCost;
+}
+function addCost(usage) {
+  if (!usage) return;
+  const inn = usage.promptTokenCount || 0;
+  const out = (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0);
+  costStore().usd += inn / 1e6 * 0.30 + out / 1e6 * 2.50;  // preturi Gemini 2.5 Flash
   save();
 }
 
@@ -63,12 +81,12 @@ async function systemPrompt() {
 
 MARKUP PROTOCOL (mandatory): wrap EVERY Romanian span in ⟦ro⟧...⟦/ro⟧. English stays unmarked. If (and only if) you correct a mistake, put ONE ⟦corr⟧...⟦/corr⟧ block at the very end. No other markup, no markdown, no asterisks, no em dashes.
 
-STYLE: turns are SHORT, 2 to 4 sentences, ending with a question that invites the learner to speak. React like a friendly person first, teach second. Correct at most ONE mistake per turn, by naturally recasting; let small errors go. Match difficulty to Book ${book}: use words the learner likely knows, one small step above. If the learner writes Romanian, answer mostly in simple English with a short ⟦ro⟧...⟦/ro⟧ helper. Keep topics to everyday life, family, work, travel and the cultures they are curious about, suitable for this couple.
+STYLE: turns are SHORT, 2 to 4 sentences, ending with a question that invites the learner to speak. React like a friendly person first, teach second. Correct at most ONE mistake per turn, by naturally recasting; let small errors go. Match difficulty to app-unit ${appLevel} of 24: use words the learner likely knows, one small step above. If the learner writes Romanian, answer mostly in simple English with a short ⟦ro⟧...⟦/ro⟧ helper. Keep topics to everyday life, family, work, travel and the cultures they are curious about, suitable for this couple.
 ${mem.text ? '\nWhat you remember about this learner from previous days (use it naturally, do not recite it):\n' + mem.text : ''}`;
 }
 
-// ---------- apelul Gemini, în flux ----------
-async function streamGemini(sys, history, onDelta) {
+// ---------- apelul Gemini (NEfluxat: robust pe iPhone, unde fetch-ul in flux e capricios) ----------
+async function callGemini(sys, history) {
   const cfg = tutorCfg();
   const contents = history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
   const res = await fetch(GURL, {
@@ -80,29 +98,15 @@ async function streamGemini(sys, history, onDelta) {
       generationConfig: { temperature: 0.8, maxOutputTokens: 500, thinkingConfig: { thinkingBudget: 0 } },
     }),
   });
-  if (!res.ok) throw new Error('Gemini ' + res.status);
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = '', full = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const lines = buf.split('\n');
-    buf = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data:')) continue;
-      try {
-        const obj = JSON.parse(line.slice(5).trim());
-        for (const cand of obj.candidates || []) {
-          for (const part of (cand.content || {}).parts || []) {
-            if (part.text) { full += part.text; onDelta(part.text); }
-          }
-        }
-      } catch (_) {}
-    }
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.text()).slice(0, 200); } catch (_) {}
+    throw new Error('Gemini ' + res.status + ' ' + detail);
   }
-  return full;
+  const j = await res.json();
+  const text = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [])
+    .map(p => p.text || '').join('');
+  return { text, usage: j.usageMetadata || null };
 }
 
 // ---------- redare: markere -> bule frumoase + voce ----------
@@ -276,24 +280,29 @@ export function renderBarza(deps) {
   async function doSend() {
     const text = inp.value.trim();
     if (!text || busy) return;
+    // plafon zilnic: dupa ~1.5$ pe zi, profesorul propune sa continue maine (fara alt apel platit)
+    if (costStore().usd >= DAILY_CAP_USD) {
+      addBubble('user', text);
+      pushMsg('user', text);
+      addBubble('assistant', 'Am vorbit frumos și mult azi! ⟦ro⟧Hai să ne odihnim și continuăm mâine, cu forțe noi.⟦/ro⟧ See you tomorrow!');
+      inp.value = '';
+      window.scrollTo(0, document.body.scrollHeight);
+      return;
+    }
     busy = true; send.disabled = true;
     stopSpeaking();
     inp.value = '';
     addBubble('user', text);
     pushMsg('user', text);
-    const bubble = addBubble('assistant', '...');
-    bubble.textContent = '';
+    const bubble = addBubble('assistant', 'Profesorul scrie...');
     chat.scrollTop = chat.scrollHeight;
     window.scrollTo(0, document.body.scrollHeight);
-    let raw = '';
     try {
       const sys = await systemPrompt();
       const ctx = chatStore().messages.slice(-12);
-      raw = await streamGemini(sys, ctx, (d) => {
-        raw += '';
-        bubble.textContent = (bubble.textContent + d).slice(0, 4000);
-        window.scrollTo(0, document.body.scrollHeight);
-      });
+      const { text: raw, usage } = await callGemini(sys, ctx);
+      addCost(usage);
+      if (!raw) throw new Error('raspuns gol');
       const corr = renderRich(bubble, raw);
       if (corr) {
         const cn = h('div', 'corr');

@@ -1,7 +1,7 @@
 // main.js — pornirea aplicației: stare, voci, service worker, plase de siguranță.
 
 import { load, state, todayStr, save, adoptExternal, applyPrefs } from './state.js';
-import { capturePairing, cloudPull, syncActive } from './sync.js';
+import { capturePairing, cloudPull, cloudPush, syncActive } from './sync.js';
 import { initSpeech } from './speech.js';
 import { startApp, renderOnboarding, toast, nav, isLessonActive, recenterMap } from './ui.js';
 import { syncStreak, syncQuests } from './gamify.js';
@@ -31,6 +31,8 @@ async function boot() {
   await load();
   // progresul mai nou din cutia familiei (alt telefon sau restaurare) se ia înainte de pornire
   try { await cloudPull(); } catch (_) {}
+  // deschiderea aplicatiei = "activ acum": marcam ora si impingem, ca panoul sa arate corect
+  try { if (syncActive() && state.data) { state.data.savedAt = Date.now(); save(true); cloudPush(); } } catch (_) {}
   if (paired) setTimeout(() => toast('✅ Sincronizarea familiei este activă', 5000), 1200);
   // preîncarcă lecțiile în fundal (nu blocăm pornirea)
   loadCourse().catch(() => {});
