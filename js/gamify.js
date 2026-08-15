@@ -119,6 +119,7 @@ export function syncStreak(p = state.profile) {
   const g = p.game, s = g.streak;
   const today = todayStr(), yest = yesterdayStr();
   const ev = { frozenUsed: false, lost: false, lostCount: 0 };
+  if ((s.best || 0) < (s.count || 0)) s.best = s.count; // recuperează recordul din seria curentă
   if (!s.lastDay || s.count === 0) return ev;
   if (s.lastDay === today || s.lastDay === yest) return ev;
   // A trecut cel puțin o zi fără activitate.
@@ -151,6 +152,7 @@ export function hitStreakToday(p = state.profile) {
   if (s.lastDay === today) return res;
   s.count += 1;
   s.lastDay = today;
+  if (s.count > (s.best || 0)) s.best = s.count; // recordul personal, pentru panou
   if (s.travel) { s.travel = false; s.travelStart = ''; } // o lecție reia automat seria
   res.extended = true;
   const MILE = { 3: 30, 7: 50, 14: 80, 30: 200, 50: 300, 100: 500, 200: 800, 365: 2000 };

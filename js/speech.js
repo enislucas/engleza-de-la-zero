@@ -81,9 +81,13 @@ let lastUtterance = null; // ținem referința — GC pe Chrome poate tăia voce
 export function speak(text, opts = {}) {
   return new Promise((resolve) => {
     if (!ttsAvailable() || !text) { resolve(false); return; }
+    // pronunție curată: adnotările din paranteze — (aux), (BBQ), (UK) — sunt pentru ochi,
+    // nu pentru voce. „do (aux)” trebuie rostit „do”, nu „do aux”.
+    const say = String(text).replace(/\s*\([^)]*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+    if (!say) { resolve(false); return; }
     try {
       const synth = window.speechSynthesis;
-      const u = new SpeechSynthesisUtterance(text);
+      const u = new SpeechSynthesisUtterance(say);
       const rate = opts.rate || 0.92;
       u.lang = opts.lang || 'en-GB';
       u.rate = rate;
@@ -98,7 +102,7 @@ export function speak(text, opts = {}) {
       u.onend = () => finish(true);
       u.onerror = () => finish(false);
       // Plasă: dacă onend nu vine (bug cunoscut), eliberăm după un timp proporțional cu viteza.
-      setTimeout(() => finish(true), (1500 + text.length * 90) / rate);
+      setTimeout(() => finish(true), (1500 + say.length * 90) / rate);
       const go = () => {
         try {
           synth.speak(u);

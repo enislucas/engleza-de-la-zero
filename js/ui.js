@@ -351,6 +351,28 @@ async function renderHome() {
     sc.appendChild(ic);
   }
 
+  // La fiecare 3 zile: un semn blând că Duolingo singur nu e destul — engleza se lipește
+  // când vorbesc cu Barza și recitesc din cărți. Nu se arată la începători (primele lecții).
+  if (p.game.stats.lessons >= 3) {
+    const last = p.barzaNudgeAt || '';
+    const daysSince = last ? Math.round((new Date(todayStr()) - new Date(last)) / 86400000) : 999;
+    if (daysSince >= 3) {
+      const nc = h('div', 'card nudge-barza');
+      nc.innerHTML = `<div class="row"><span style="font-size:1.7rem">🦢</span>
+        <div class="grow"><b>Engleza se lipește când o folosești</b>
+        <div class="set-d">Exercițiile de zi cu zi sunt un început bun. Dar engleza rămâne cu adevărat când <b>vorbești cu Profesorul Barza</b> și <b>recitești din cărți</b>. Ai o întrebare de gramatică? Întreabă-l, îți răspunde pe loc și îți spune din ce carte să recitești.</div></div></div>`;
+      const row = h('div', 'row mt8');
+      const go = h('button', 'btn btn-primary grow', '🦢 Vorbește cu Barza');
+      const later = h('button', 'btn', 'Mai târziu');
+      const dismiss = () => { p.barzaNudgeAt = todayStr(); save(true); };
+      go.addEventListener('click', () => { dismiss(); nav('barza'); });
+      later.addEventListener('click', () => { dismiss(); nc.remove(); });
+      row.appendChild(go); row.appendChild(later);
+      nc.appendChild(row);
+      sc.appendChild(nc);
+    }
+  }
+
   const filtered = meta.units.filter(u => !u.track || u.track === p.track);
   // deblocarea se calculează pe lista vizibilă pentru traseul ales
   let filteredCur = filtered.length - 1;

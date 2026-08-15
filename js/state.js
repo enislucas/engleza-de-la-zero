@@ -31,7 +31,7 @@ export function newProfile(name, avatar) {
     bookProgress: { book: 0, note: '', at: 0 },
     game: {
       xp: 0, gems: 120, hearts: 5, heartsAt: Date.now(),
-      streak: { count: 0, lastDay: '', freezes: 1, travel: false, travelStart: '', repairUsed: '' },
+      streak: { count: 0, best: 0, lastDay: '', freezes: 1, travel: false, travelStart: '', repairUsed: '' },
       league: { tier: 0, weekId: '', xpWeek: 0, history: [] },
       quests: { day: '', list: [] },
       boost: { until: 0 },

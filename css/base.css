@@ -79,6 +79,7 @@ button { font-family: inherit; }
   border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
 }
 .card.flat { border-width: 1px; }
+.card.nudge-barza { border-color: var(--brand, #58a55c); background: color-mix(in srgb, var(--brand, #58a55c) 8%, var(--card)); }
 .row { display: flex; align-items: center; gap: 12px; }
 .card.row { flex-wrap: wrap; } /* butonul coboară pe rând nou pe ecrane înguste */
 .grow { flex: 1 1 150px; min-width: 0; }
