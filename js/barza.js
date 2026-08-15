@@ -407,19 +407,44 @@ async function videoShelf(cfgAll) {
   const wrap = h('div', 'b-shelf');
   try {
     const r = await fetch(`${cfgAll.url}/media/${cfgAll.box}/list`);
-    const items = (await r.json()).sort((a, b) => b.stamp - a.stamp).slice(0, 3);
-    if (!items.length) {
-      wrap.appendChild(h('div', 'sub tc', 'Podcasturile video apar aici după următorul episod făcut acasă. 🎬'));
+    const all = await r.json();
+    // grupam pe EPISOD (ep1.mp4/.mp3/.txt = un singur episod), nu pe fisier
+    const groups = {};
+    for (const it of all) {
+      const m = String(it.name).match(/^(.*)\.(mp4|mp3|txt)$/i);
+      if (!m) continue;
+      const base = m[1], ext = m[2].toLowerCase();
+      const g = (groups[base] = groups[base] || { title: it.title, stamp: 0, files: {} });
+      g.files[ext] = it.name;
+      if ((it.stamp || 0) > g.stamp) g.stamp = it.stamp || 0;
+      if (it.title) g.title = it.title;
+    }
+    const eps = Object.values(groups).sort((a, b) => b.stamp - a.stamp).slice(0, 3);
+    if (!eps.length) {
+      wrap.appendChild(h('div', 'sub tc', 'Podcasturile apar aici după următorul episod făcut acasă. 🎬'));
       return wrap;
     }
     wrap.appendChild(h('div', 'b-shelf-t', '🎬 Ultimele podcasturi'));
-    for (const it of items) {
-      const btn = h('button', 'b-vid', `▶ ${esc(decodeURIComponent(it.title || it.name))}`);
-      btn.addEventListener('click', () => openVideo(`${cfgAll.url}/media/${cfgAll.box}/${it.name}`));
-      wrap.appendChild(btn);
+    for (const ep of eps) {
+      const card = h('div', 'b-vid-card');
+      card.appendChild(h('div', 'b-vid-title', esc(decodeURIComponent(ep.title || 'Episod'))));
+      const row = h('div', 'b-vid-row');
+      const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}`;
+      if (ep.files.mp4) {
+        const w = h('button', 'b-vid-btn', '▶ Vezi');
+        w.addEventListener('click', () => openVideo(src(ep.files.mp4)));
+        row.appendChild(w);
+      }
+      if (ep.files.mp3) {
+        const a = h('button', 'b-vid-btn ghost', '🎧 Ascultă');
+        a.addEventListener('click', () => openVideo(src(ep.files.mp3)));
+        row.appendChild(a);
+      }
+      card.appendChild(row);
+      wrap.appendChild(card);
     }
   } catch (_) {
-    wrap.appendChild(h('div', 'sub tc', 'Raftul video nu răspunde acum — încearcă mai târziu.'));
+    wrap.appendChild(h('div', 'sub tc', 'Raftul nu răspunde acum — încearcă mai târziu.'));
   }
   return wrap;
 }
