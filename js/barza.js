@@ -549,19 +549,21 @@ async function openVideo(cfgAll, ep) {
   // controale subtitrare: pornit/oprit + marime (se tin minte)
   const p = state.profile;
   let subOn = p.subOn !== false;                   // PORNIT implicit
-  let sizeI = SUB_SIZES.indexOf(p.subSize || 'lg'); if (sizeI < 0) sizeI = 2;
+  let sizeI = SUB_SIZES.indexOf(p.subSize || 'sm'); if (sizeI < 0) sizeI = 0;
+  if (!p.subSizeSet) sizeI = 0;                     // implicit MIC (pana aleg ei; nu acopera ecranul)
   const bar = h('div', 'b-sub-bar');
-  const toggle = h('button', 'b-sub-btn', '');
+  const toggle = h('button', 'b-sub-btn', '💬');   // scurt, ca sa NU acopere X-ul din colt
   const smaller = h('button', 'b-sub-btn', 'A−');
   const bigger = h('button', 'b-sub-btn', 'A+');
   const applySub = () => {
     subEl.className = 'b-sub ' + SUB_SIZES[sizeI] + (subOn ? '' : ' off');
-    toggle.textContent = subOn ? '💬 Subtitrare pornită' : '💬 Subtitrare oprită';
+    toggle.textContent = '💬';
+    toggle.classList.toggle('dim', !subOn);
     p.subOn = subOn; p.subSize = SUB_SIZES[sizeI]; try { save(); } catch (_) {}
   };
   toggle.addEventListener('click', () => { subOn = !subOn; applySub(); });
-  smaller.addEventListener('click', () => { sizeI = Math.max(0, sizeI - 1); applySub(); });
-  bigger.addEventListener('click', () => { sizeI = Math.min(SUB_SIZES.length - 1, sizeI + 1); applySub(); });
+  smaller.addEventListener('click', () => { sizeI = Math.max(0, sizeI - 1); p.subSizeSet = true; applySub(); });
+  bigger.addEventListener('click', () => { sizeI = Math.min(SUB_SIZES.length - 1, sizeI + 1); p.subSizeSet = true; applySub(); });
   bar.appendChild(toggle); bar.appendChild(smaller); bar.appendChild(bigger);
   ov.appendChild(vid); ov.appendChild(subEl); ov.appendChild(x); ov.appendChild(fs); ov.appendChild(bar);
   document.body.appendChild(ov);
