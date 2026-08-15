@@ -541,8 +541,10 @@ async function openReader(cfgAll, ep) {
     });
   } else {
     try {
-      const t = ep.files.txt ? await (await fetch(src(ep.files.txt))).text() : '';
-      appendWords(textWrap, t || '(transcriere indisponibilă)');
+      let t = ep.files.txt ? await (await fetch(src(ep.files.txt))).text() : '';
+      // scoatem antetul (titlu + „Cafeaua englezească · Profesorul Barza”) — titlul e deja sus
+      if (t.includes('\n\n')) t = t.split('\n\n').slice(1).join('\n\n');
+      appendWords(textWrap, t.trim() || '(transcriere indisponibilă)');
     } catch (_) { textWrap.textContent = '(transcriere indisponibilă)'; }
   }
 
