@@ -31,6 +31,14 @@ async function boot() {
   await load();
   // progresul mai nou din cutia familiei (alt telefon sau restaurare) se ia înainte de pornire
   try { await cloudPull(); } catch (_) {}
+  // erorile vechi (>48h) se sting singure — jurnalul nu rămâne plin de bug-uri deja reparate
+  try {
+    const cut = Date.now() - 48 * 3600 * 1000;
+    const cur = (state.data && state.data.errlog) || JSON.parse(localStorage.getItem('ezr_errlog') || '[]');
+    const log = cur.filter(e => { const t = Date.parse(String(e).slice(0, 24)); return isNaN(t) || t >= cut; });
+    localStorage.setItem('ezr_errlog', JSON.stringify(log));
+    if (state.data) state.data.errlog = log;
+  } catch (_) {}
   // deschiderea aplicatiei = "activ acum": marcam ora si impingem, ca panoul sa arate corect
   try { if (syncActive() && state.data) { state.data.savedAt = Date.now(); save(true); cloudPush(); } } catch (_) {}
   if (paired) setTimeout(() => toast('✅ Sincronizarea familiei este activă', 5000), 1200);
