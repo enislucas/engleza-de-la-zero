@@ -447,7 +447,7 @@ async function videoShelf(cfgAll) {
       }
       if (ep.files.mp4) {
         const w = h('button', 'b-vid-btn ghost', '📺 Video');
-        w.addEventListener('click', () => openVideo(src(ep.files.mp4)));
+        w.addEventListener('click', () => openVideo(cfgAll, ep));
         row.appendChild(w);
       }
       card.appendChild(row);
@@ -501,24 +501,60 @@ function showHistory() {
   document.body.appendChild(ov);
 }
 
-function openVideo(src) {
+// grupeaza cuvintele in randuri de subtitrare (pe propozitie / max 12 cuvinte)
+function buildSubs(words) {
+  const lines = []; let cur = [];
+  const flush = () => { if (cur.length) { lines.push({ t: cur[0].t, end: cur[cur.length - 1].t + (cur[cur.length - 1].d || 0.3), text: cur.map(x => x.w).join(' ') }); cur = []; } };
+  for (const wd of words) { cur.push(wd); if (/[.!?]$/.test(wd.w) || cur.length >= 12) flush(); }
+  flush();
+  return lines;
+}
+const SUB_SIZES = ['sm', 'md', 'lg', 'xl'];
+async function openVideo(cfgAll, ep) {
+  const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}?t=${ep.stamp || 0}`;
   const ov = h('div', 'b-video-ov');
   const vid = document.createElement('video');
   vid.controls = true; vid.autoplay = true; vid.playsInline = true;
-  vid.src = src;
+  vid.src = src(ep.files.mp4);
+  const subEl = h('div', 'b-sub');                 // subtitrarea noastra (fiabila, cu marime reglabila)
   const x = h('button', 'b-video-x', '✕');
   x.addEventListener('click', () => { try { vid.pause(); } catch (_) {} ov.remove(); });
-  // buton ecran complet → permite rotirea în peisaj (landscape) pe telefon
   const fs = h('button', 'b-video-fs', '⛶ Ecran mare');
   fs.addEventListener('click', () => {
     try {
-      if (vid.webkitEnterFullscreen) vid.webkitEnterFullscreen();      // iOS
+      if (vid.webkitEnterFullscreen) vid.webkitEnterFullscreen();
       else if (vid.requestFullscreen) vid.requestFullscreen();
       else if (vid.webkitRequestFullscreen) vid.webkitRequestFullscreen();
     } catch (_) {}
   });
-  ov.appendChild(vid); ov.appendChild(x); ov.appendChild(fs);
+  // controale subtitrare: pornit/oprit + marime (se tin minte)
+  const p = state.profile;
+  let subOn = p.subOn !== false;                   // PORNIT implicit
+  let sizeI = SUB_SIZES.indexOf(p.subSize || 'lg'); if (sizeI < 0) sizeI = 2;
+  const bar = h('div', 'b-sub-bar');
+  const toggle = h('button', 'b-sub-btn', '');
+  const smaller = h('button', 'b-sub-btn', 'A−');
+  const bigger = h('button', 'b-sub-btn', 'A+');
+  const applySub = () => {
+    subEl.className = 'b-sub ' + SUB_SIZES[sizeI] + (subOn ? '' : ' off');
+    toggle.textContent = subOn ? '💬 Subtitrare pornită' : '💬 Subtitrare oprită';
+    p.subOn = subOn; p.subSize = SUB_SIZES[sizeI]; try { save(); } catch (_) {}
+  };
+  toggle.addEventListener('click', () => { subOn = !subOn; applySub(); });
+  smaller.addEventListener('click', () => { sizeI = Math.max(0, sizeI - 1); applySub(); });
+  bigger.addEventListener('click', () => { sizeI = Math.min(SUB_SIZES.length - 1, sizeI + 1); applySub(); });
+  bar.appendChild(toggle); bar.appendChild(smaller); bar.appendChild(bigger);
+  ov.appendChild(vid); ov.appendChild(subEl); ov.appendChild(x); ov.appendChild(fs); ov.appendChild(bar);
   document.body.appendChild(ov);
+  applySub();
+  let subs = [];
+  try { if (ep.files.json) subs = buildSubs(((await (await fetch(src(ep.files.json))).json()).words) || []); } catch (_) {}
+  vid.addEventListener('timeupdate', () => {
+    if (!subOn || !subs.length) { subEl.textContent = ''; return; }
+    const ct = vid.currentTime;
+    const line = subs.find(s => ct >= s.t && ct < s.end);
+    subEl.textContent = line ? line.text : '';
+  });
 }
 
 // ---------- cititorul: audio + text sincron (karaoke) + traducere pe cuvant ----------
