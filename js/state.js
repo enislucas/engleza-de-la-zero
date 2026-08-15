@@ -26,6 +26,9 @@ export function newProfile(name, avatar) {
     track: 'general',         // general | sanatate | munca
     soundOn: true,
     created: todayStr(),
+    // cartile TIPARITE sunt un al treilea drum, separat de aplicatie: le citesc in ritmul lor
+    // si isi trec singuri progresul (ce carte + ce pagina/lectie). Profesorul il foloseste.
+    bookProgress: { book: 0, note: '', at: 0 },
     game: {
       xp: 0, gems: 120, hearts: 5, heartsAt: Date.now(),
       streak: { count: 0, lastDay: '', freezes: 1, travel: false, travelStart: '', repairUsed: '' },

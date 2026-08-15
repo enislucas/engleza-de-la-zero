@@ -49,13 +49,17 @@ function pushMsg(role, content) {
 // ---------- promptul: același profesor, în buzunar ----------
 async function systemPrompt() {
   const p = state.profile;
-  let book = 1;
+  let appLevel = 1;
   try {
     const meta = await loadCourse();
-    book = meta.units[currentUnitIndex(p, meta)].book;
+    appLevel = meta.units[currentUnitIndex(p, meta)].book;
   } catch (_) {}
   const mem = await fetchMemory();
-  return `You are Profesorul Barza, a warm, patient English tutor for Romanian adults aged 55+, here in "pocket" form on the learner's phone. The learner is ${p.name || 'the learner'}, currently around Book ${book} of a 24-book course (A1 to B2).
+  const bp = p.bookProgress || {};
+  const bookLine = bp.book
+    ? `They are reading the PRINTED book series (separate from the app, at their own pace): currently Book ${bp.book} of 24${bp.note ? ', ' + bp.note : ''}. Pitch what you reference to what they have actually read on paper.`
+    : `They have not recorded printed-book progress yet.`;
+  return `You are Profesorul Barza, a warm, patient English tutor for Romanian adults aged 55+, here in "pocket" form on the learner's phone. The learner is ${p.name || 'the learner'}. Their phone-app level is around unit ${appLevel} of 24 (use it to gauge difficulty). ${bookLine}
 
 MARKUP PROTOCOL (mandatory): wrap EVERY Romanian span in ⟦ro⟧...⟦/ro⟧. English stays unmarked. If (and only if) you correct a mistake, put ONE ⟦corr⟧...⟦/corr⟧ block at the very end. No other markup, no markdown, no asterisks, no em dashes.
 
@@ -208,6 +212,28 @@ export function renderBarza(deps) {
   }
 
   videoShelf(cfg).then(shelf => sc.insertBefore(shelf, sc.firstChild));
+
+  // cartile tiparite: al treilea drum, actualizat de mana (aplicatia nu stie ce citesc pe hartie)
+  const bp = state.profile.bookProgress || { book: 0, note: '', at: 0 };
+  const bc = h('div', 'card b-book');
+  const opts = ['<option value="0">— nicio carte încă —</option>'];
+  for (let i = 1; i <= 24; i++) opts.push(`<option value="${i}"${bp.book === i ? ' selected' : ''}>Cartea ${i}</option>`);
+  bc.innerHTML = `<div class="b-book-t">📕 Cartea tipărită la care ești</div>
+    <div class="b-book-row">
+      <select class="b-book-sel">${opts.join('')}</select>
+      <input class="b-book-note" inputmode="text" placeholder="pagina sau lecția" value="${esc(bp.note || '')}">
+      <button class="b-book-save">Salvează</button>
+    </div>
+    <div class="b-book-msg muted">${bp.book ? 'Acum: Cartea ' + bp.book + (bp.note ? ', ' + esc(bp.note) : '') : 'Spune-i profesorului ce carte citești pe hârtie.'}</div>`;
+  sc.appendChild(bc);
+  bc.querySelector('.b-book-save').addEventListener('click', () => {
+    const book = parseInt(bc.querySelector('.b-book-sel').value, 10) || 0;
+    const note = bc.querySelector('.b-book-note').value.trim().slice(0, 40);
+    state.profile.bookProgress = { book, note, at: Date.now() };
+    save(true);
+    memCache.t = 0; // reincarcam contextul ca profesorul sa stie pe loc
+    bc.querySelector('.b-book-msg').textContent = book ? `✓ Salvat: Cartea ${book}${note ? ', ' + note : ''}` : '✓ Salvat';
+  });
 
   const chat = h('div', 'b-chat');
   sc.appendChild(chat);
