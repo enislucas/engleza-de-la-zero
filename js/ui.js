@@ -351,16 +351,31 @@ async function renderHome() {
     sc.appendChild(ic);
   }
 
-  // La fiecare 3 zile: un semn blând că Duolingo singur nu e destul — engleza se lipește
-  // când vorbesc cu Barza și recitesc din cărți. Nu se arată la începători (primele lecții).
-  if (p.game.stats.lessons >= 3) {
+  const filtered = meta.units.filter(u => !u.track || u.track === p.track);
+  // deblocarea se calculează pe lista vizibilă pentru traseul ales
+  let filteredCur = filtered.length - 1;
+  for (let i = 0; i < filtered.length; i++) {
+    const pr = unitProgress(p, filtered[i]);
+    if (pr.done < pr.total || !pr.test) { filteredCur = i; break; }
+  }
+
+  // Semn blând (o dată la 3 zile) DOAR când cartea din aplicație e alta decât cea tipărită
+  // pe care o citesc în realitate: atunci înseamnă că aleargă prin aplicație fără să
+  // consolideze. Îi îndeamnă să recitească lecțiile vechi până ies perfect, să recitească
+  // din cărți și să vorbească cu Barza. Nu se arată la începători (primele lecții).
+  const appBook = filtered[filteredCur] && filtered[filteredCur].book;
+  const printedBook = (p.bookProgress && p.bookProgress.book) || 0;
+  if (p.game.stats.lessons >= 3 && appBook && printedBook !== appBook) {
     const last = p.barzaNudgeAt || '';
     const daysSince = last ? Math.round((new Date(todayStr()) - new Date(last)) / 86400000) : 999;
     if (daysSince >= 3) {
+      const behind = printedBook
+        ? `Ești la Cartea ${appBook} în aplicație, dar la Cartea ${printedBook} pe hârtie.`
+        : `Ești la Cartea ${appBook} în aplicație, dar cărțile tipărite încă nu sunt începute.`;
       const nc = h('div', 'card nudge-barza');
       nc.innerHTML = `<div class="row"><span style="font-size:1.7rem">🦢</span>
-        <div class="grow"><b>Engleza se lipește când o folosești</b>
-        <div class="set-d">Exercițiile de zi cu zi sunt un început bun. Dar engleza rămâne cu adevărat când <b>vorbești cu Profesorul Barza</b> și <b>recitești din cărți</b>. Ai o întrebare de gramatică? Întreabă-l, îți răspunde pe loc și îți spune din ce carte să recitești.</div></div></div>`;
+        <div class="grow"><b>Nu te grăbi — fă engleza să rămână</b>
+        <div class="set-d">${behind} Engleza se lipește când consolidezi: <b>reia lecțiile vechi până ies perfect</b>, <b>recitește din cărți</b> și <b>vorbește cu Profesorul Barza</b> despre ce înveți. Ai o întrebare de gramatică? Întreabă-l, îți spune și din ce carte să recitești.</div></div>`;
       const row = h('div', 'row mt8');
       const go = h('button', 'btn btn-primary grow', '🦢 Vorbește cu Barza');
       const later = h('button', 'btn', 'Mai târziu');
@@ -371,14 +386,6 @@ async function renderHome() {
       nc.appendChild(row);
       sc.appendChild(nc);
     }
-  }
-
-  const filtered = meta.units.filter(u => !u.track || u.track === p.track);
-  // deblocarea se calculează pe lista vizibilă pentru traseul ales
-  let filteredCur = filtered.length - 1;
-  for (let i = 0; i < filtered.length; i++) {
-    const pr = unitProgress(p, filtered[i]);
-    if (pr.done < pr.total || !pr.test) { filteredCur = i; break; }
   }
   filtered.forEach((u, idx) => {
     const prog = unitProgress(p, u);
