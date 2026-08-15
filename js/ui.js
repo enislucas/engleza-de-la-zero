@@ -173,7 +173,7 @@ const AVATARS = ['😊', '🙂', '😃', '🧑', '👩', '👨', '👩‍🦳', 
 const THEMES = [
   { id: 'vesel', name: 'Vesel', desc: 'Colorat și jucăuș', dots: ['#58cc02', '#1cb0f6', '#ffc800', '#ffffff'] },
   { id: 'cald', name: 'Cald', desc: 'Culori calde, liniștit', dots: ['#d96f32', '#2a9d8f', '#e9c46a', '#fdf6ec'] },
-  { id: 'minimal', name: 'Minimalist', desc: 'Simplu și modern', dots: ['#2563eb', '#0891b2', '#f59e0b', '#ffffff'] },
+  { id: 'minimal', name: 'Minimal', desc: 'Simplu și modern', dots: ['#2563eb', '#0891b2', '#f59e0b', '#ffffff'] },
   { id: 'noapte', name: 'Noapte', desc: 'Întunecat, odihnitor', dots: ['#79d21f', '#4cc2ff', '#ffd23e', '#131f24'] },
 ];
 
@@ -1459,11 +1459,11 @@ function renderProfile() {
     }, 1500);
   }
   if (enVoices.length > 1) {
-    const rowV = h('div', 'set-row');
+    const rowV = h('div', 'set-row col');
     rowV.appendChild(h('div', '', '<div class="set-l">Vocea de engleză</div><div class="set-d">Alege-o pe cea care sună cel mai natural</div>'));
     const wrapV = h('div', 'row');
     const sel = h('select', 'name-in');
-    sel.style.marginTop = '0'; sel.style.maxWidth = '46vw'; sel.style.fontSize = '0.95rem'; sel.style.padding = '10px';
+    sel.style.marginTop = '0'; sel.style.flex = '1'; sel.style.minWidth = '0'; sel.style.fontSize = '0.95rem'; sel.style.padding = '10px';
     const auto = h('option', '', 'Automat (recomandat)');
     auto.value = '';
     sel.appendChild(auto);
