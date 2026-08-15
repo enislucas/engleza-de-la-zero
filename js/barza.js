@@ -129,11 +129,16 @@ function costStore() {
   if (!p.tutorCost || p.tutorCost.day !== todayStr()) p.tutorCost = { day: todayStr(), usd: 0 };
   return p.tutorCost;
 }
-function addCost(usage) {
+function addCost(usage, deepseek) {
   if (!usage) return;
-  const inn = usage.promptTokenCount || 0;
-  const out = (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0);
-  costStore().usd += inn / 1e6 * 0.30 + out / 1e6 * 2.50;  // preturi Gemini 2.5 Flash
+  if (deepseek) {
+    const inn = usage.prompt_tokens || 0, out = usage.completion_tokens || 0;
+    costStore().usd += inn / 1e6 * 0.14 + out / 1e6 * 0.28;   // preturi DeepSeek
+  } else {
+    const inn = usage.promptTokenCount || 0;
+    const out = (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0);
+    costStore().usd += inn / 1e6 * 0.30 + out / 1e6 * 2.50;   // preturi Gemini 2.5 Flash
+  }
   save();
 }
 
@@ -227,6 +232,43 @@ async function callGemini(sys, history, opts = {}) {
   return { text, usage: j.usageMetadata || null };
 }
 
+// ---------- DeepSeek (ieftin, pentru mesaje simple) — API compatibil OpenAI, merge din browser ----------
+const DS_URL = 'https://api.deepseek.com/chat/completions';
+async function callDeepSeek(sys, history, opts = {}) {
+  const cfg = tutorCfg();
+  if (!cfg || !cfg.dkey) throw new Error('fara cheie DeepSeek');
+  const messages = [{ role: 'system', content: sys }]
+    .concat(history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })));
+  const res = await fetch(DS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.dkey },
+    body: JSON.stringify({ model: 'deepseek-chat', messages, temperature: opts.temp ?? 0.8, max_tokens: opts.maxTokens ?? 500 }),
+  });
+  if (!res.ok) { let d = ''; try { d = (await res.text()).slice(0, 200); } catch (_) {} throw new Error('DeepSeek ' + res.status + ' ' + d); }
+  const j = await res.json();
+  return { text: (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '', usage: j.usage || null, deepseek: true };
+}
+
+// ---------- routerul de model, chiar pe telefon ----------
+// Gemini (cea mai buna romana) cand conteaza: voce, mesaj lung, intrebari de
+// gramatica/vocabular/traducere. DeepSeek (ieftin) la palavrageala simpla.
+const GEMINI_TRIGGERS = /(de ce|pentru ce|cum se|cum spun|cum zic|ce inseamn|ce înseamn|ce vrea|diferen[țt]|traduc|corect|gre[șs]e|gramatic|explic|conjug|why|how do|how doe|what does|what is the difference|translat|grammar|mean|tense|plural|past tense)/i;
+function routePrefer(voice, lastUser) {
+  if (voice) return 'gemini';
+  const t = (lastUser || '').trim();
+  if (t.length > 220) return 'gemini';
+  if (GEMINI_TRIGGERS.test(t)) return 'gemini';
+  return 'deepseek';
+}
+// alege motorul; celalalt e plasa DOAR daca primul cade inainte sa dea text
+async function callLLM(sys, history, prefer, opts = {}) {
+  if (prefer === 'deepseek' && (tutorCfg() || {}).dkey) {
+    try { return await callDeepSeek(sys, history, opts); }
+    catch (_) { /* cade pe Gemini */ }
+  }
+  return await callGemini(sys, history, opts);  // { text, usage } (fara flag deepseek)
+}
+
 // ---------- traducere in romana la cerere (doar cand apasa; ieftin, cu cache) ----------
 const TR_CACHE = new Map();
 function plainText(raw) {
@@ -235,15 +277,46 @@ function plainText(raw) {
 async function translateRo(text) {
   if (TR_CACHE.has(text)) return TR_CACHE.get(text);
   const sys = 'Ești traducător. Tradu mesajul următor în română naturală, simplă și caldă, pentru un adult de 55+. Răspunde DOAR cu traducerea, text simplu, fără explicații sau ghilimele.';
-  const { text: ro, usage } = await callGemini(sys, [{ role: 'user', content: text }], { temp: 0.2, maxTokens: 320 });
-  addCost(usage);
-  const out = (ro || '').trim();
+  const r = await callLLM(sys, [{ role: 'user', content: text }], 'deepseek', { temp: 0.2, maxTokens: 320 });
+  addCost(r.usage, r.deepseek);
+  const out = (r.text || '').trim();
   if (out) TR_CACHE.set(text, out);
   return out;
 }
 
+// ---------- traducere cuvant cu cuvant (dictionarul cursului = gratis; LLM doar la nevoie) ----------
+const WORD_DICT = new Map();   // en (mic) -> ro, din vocabularul cartilor (fara cost)
+const WORD_CACHE = new Map();  // traduceri LLM deja cerute
+function seedDict(unit) {
+  for (const v of (unit && unit.vocab) || []) {
+    const en = String(v.en || '').toLowerCase().replace(/\([^)]*\)/g, '').trim();
+    if (en && v.ro && !WORD_DICT.has(en)) WORD_DICT.set(en, v.ro);
+  }
+}
+const normWord = (w) => String(w || '').toLowerCase().replace(/^[^a-z']+|[^a-z']+$/g, '');
+async function wordRo(word) {
+  const w = normWord(word);
+  if (!w) return '';
+  if (WORD_DICT.has(w)) return WORD_DICT.get(w);         // din carte, instant si gratis
+  if (WORD_CACHE.has(w)) return WORD_CACHE.get(w);
+  const sys = 'Ești dicționar englez-român. Dă traducerea în română a cuvântului englezesc primit (sensul cel mai comun, 1-3 cuvinte). Răspunde DOAR cu traducerea, fără explicații.';
+  const r = await callLLM(sys, [{ role: 'user', content: word }], 'deepseek', { temp: 0, maxTokens: 24 });
+  addCost(r.usage, r.deepseek);
+  const out = (r.text || '').trim().replace(/^["'\s]+|["'.\s]+$/g, '');
+  if (out) WORD_CACHE.set(w, out);
+  return out;
+}
+
 // ---------- redare: markere -> bule frumoase + voce ----------
-function renderRich(el, raw) {
+function appendWords(el, en) {
+  // pastreaza spatiile si punctuatia, dar face fiecare cuvant englezesc tapabil (traducere)
+  for (const tok of en.split(/(\s+)/)) {
+    if (!tok) continue;
+    if (/[a-zA-Z]/.test(tok) && !/^\s+$/.test(tok)) el.appendChild(h('span', 'b-w', esc(tok)));
+    else el.appendChild(document.createTextNode(tok));
+  }
+}
+function renderRich(el, raw, opts = {}) {
   el.innerHTML = '';
   let corr = '';
   let text = String(raw).replace(/⟦corr⟧([\s\S]*?)(⟦\/corr⟧|$)/, (_, c) => { corr = c.trim(); return ''; });
@@ -251,10 +324,29 @@ function renderRich(el, raw) {
   for (const seg of parts) {
     if (!seg) continue;
     const m = seg.match(/^⟦ro⟧([\s\S]*?)(?:⟦\/ro⟧)?$/);
-    if (m) el.appendChild(h('span', 'b-ro', esc(m[1])));
-    else el.appendChild(document.createTextNode(seg.replace(/⟦[^⟧]*⟧?/g, '')));
+    if (m) { el.appendChild(h('span', 'b-ro', esc(m[1]))); continue; }
+    const en = seg.replace(/⟦[^⟧]*⟧?/g, '');
+    if (opts.words) appendWords(el, en);        // cuvinte tapabile (traducere cuvant cu cuvant)
+    else el.appendChild(document.createTextNode(en));
   }
   return corr;
+}
+
+// mic popover cu traducerea unui cuvant, deasupra lui
+let _tip = null;
+function hideTip() { if (_tip) _tip.style.display = 'none'; }
+function showWordTip(span, text) {
+  if (!_tip) {
+    _tip = h('div', 'b-wtip');
+    document.body.appendChild(_tip);
+    document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.b-w')) hideTip(); }, true);
+    window.addEventListener('scroll', hideTip, true);
+  }
+  _tip.textContent = text;
+  _tip.style.display = 'block';
+  const r = span.getBoundingClientRect();
+  _tip.style.left = Math.max(8, Math.min(r.left + r.width / 2, window.innerWidth - 8)) + 'px';
+  _tip.style.top = (r.top - 8) + 'px';
 }
 function segmentsOf(raw) {
   const out = [];
@@ -426,6 +518,26 @@ export function renderBarza(deps) {
   const chat = h('div', 'b-chat');
   sc.appendChild(chat);
   const store = chatStore();
+
+  // seed dictionar (curenta + 2 precedente) ca taparea pe cuvant sa fie gratis pentru
+  // cuvintele din carti; restul se traduc cu un apel mic la nevoie
+  (async () => {
+    try {
+      const meta = await loadCourse();
+      const idx = currentUnitIndex(state.profile, meta);
+      for (const j of [idx, idx - 1, idx - 2]) if (meta.units[j]) seedDict(await loadUnit(meta.units[j].id));
+    } catch (_) {}
+  })();
+  // tap pe un cuvant englezesc din raspunsul profesorului -> traducerea lui, deasupra
+  chat.addEventListener('click', async (e) => {
+    const w = e.target.closest && e.target.closest('.b-w');
+    if (!w) return;
+    showWordTip(w, '…');
+    try { showWordTip(w, (await wordRo(w.textContent)) || '(?)'); }
+    catch (_) { showWordTip(w, '(?)'); }
+  });
+  let lastVoice = false;   // ultimul mesaj a venit prin microfon? (atunci: Gemini)
+
   // buton „🇷🇴 în română” sub bula profesorului: traduce la cerere, cache, se ascunde/arata
   const attachTranslate = (target, raw) => {
     const en = plainText(raw);
@@ -450,7 +562,7 @@ export function renderBarza(deps) {
   const addBubble = (role, content) => {
     const b = h('div', 'msg ' + (role === 'user' ? 'user' : 'tutor'));
     if (role === 'user') { b.textContent = content; chat.appendChild(b); return b; }
-    const corr = renderRich(b, content);
+    const corr = renderRich(b, content, { words: true });   // cuvinte tapabile
     chat.appendChild(b);
     attachTranslate(b, content);
     if (corr) {
@@ -504,10 +616,13 @@ export function renderBarza(deps) {
     try {
       const sys = await systemPrompt();
       const ctx = chatStore().messages.slice(-12);   // context scurt = ieftin
-      const { text: raw, usage } = await callGemini(sys, ctx);
-      addCost(usage);
+      const prefer = routePrefer(lastVoice, text);   // voce/gramatica -> Gemini; restul -> DeepSeek
+      lastVoice = false;
+      const r = await callLLM(sys, ctx, prefer);
+      addCost(r.usage, r.deepseek);
+      const raw = r.text;
       if (!raw) throw new Error('raspuns gol');
-      const corr = renderRich(bubble, raw);
+      const corr = renderRich(bubble, raw, { words: true });
       attachTranslate(bubble, raw);                  // 🇷🇴 sub raspuns
       if (corr) {
         const cn = h('div', 'corr');
@@ -537,7 +652,7 @@ export function renderBarza(deps) {
     stopSpeaking();
     try {
       const r = await listenOnce('en-GB', 12000);
-      if (r && r.ok && r.text) inp.value = (inp.value ? inp.value + ' ' : '') + r.text;
+      if (r && r.ok && r.text) { inp.value = (inp.value ? inp.value + ' ' : '') + r.text; lastVoice = true; }
     } catch (_) {}
     listening = false; mic.classList.remove('rec');
     inp.focus();

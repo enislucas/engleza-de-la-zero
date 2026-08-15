@@ -13,19 +13,22 @@ try { cfg = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (_) {}
 export function syncActive() { return !!(cfg && cfg.url && cfg.box && cfg.key); }
 
 // linkul de împerechere: #pair=base64url("https://cutie|box|cheie") — 3 părți pentru sync,
-// sau 7 pentru sync + Barza de buzunar: url|box|cheie|cutiaTutorelui|cheiaTutorelui|cheiaGemini|cine
+// 7 pentru sync + Barza de buzunar: url|box|cheie|cutiaTutorelui|cheiaTutorelui|cheiaGemini|cine,
+// sau 8 dacă adaugă și cheia DeepSeek la final (routerul de model rulează și pe telefon).
+function storeParts(parts) {
+  cfg = { url: parts[0].replace(/\/+$/, ''), box: parts[1], key: parts[2] };
+  if (parts.length >= 7) { cfg.tbox = parts[3]; cfg.tkey = parts[4]; cfg.gkey = parts[5]; cfg.who = parts[6]; }
+  if (parts.length >= 8 && parts[7]) cfg.dkey = parts[7];
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+}
 export function capturePairing() {
   const m = (location.hash || '').match(/#?pair=([A-Za-z0-9_-]+)/);
   if (!m) return false;
   try {
     const parts = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')).split('|');
     const urlOk = /^https:\/\//.test(parts[0]) || /^http:\/\/(127\.0\.0\.1|localhost)/.test(parts[0]);
-    if ((parts.length === 3 || parts.length === 7) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
-      cfg = { url: parts[0].replace(/\/+$/, ''), box: parts[1], key: parts[2] };
-      if (parts.length === 7) {
-        cfg.tbox = parts[3]; cfg.tkey = parts[4]; cfg.gkey = parts[5]; cfg.who = parts[6];
-      }
-      localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+    if ([3, 7, 8].includes(parts.length) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
+      storeParts(parts);
       history.replaceState(null, '', location.pathname + location.search);
       return true;
     }
@@ -46,10 +49,8 @@ export function applyPairingString(s) {
   try {
     const parts = atob(tok.replace(/-/g, '+').replace(/_/g, '/')).split('|');
     const urlOk = /^https?:\/\//.test(parts[0]);
-    if ((parts.length === 3 || parts.length === 7) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
-      cfg = { url: parts[0].replace(/\/+$/, ''), box: parts[1], key: parts[2] };
-      if (parts.length === 7) { cfg.tbox = parts[3]; cfg.tkey = parts[4]; cfg.gkey = parts[5]; cfg.who = parts[6]; }
-      localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+    if ([3, 7, 8].includes(parts.length) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
+      storeParts(parts);
       return true;
     }
   } catch (_) {}

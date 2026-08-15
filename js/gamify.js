@@ -119,7 +119,10 @@ export function syncStreak(p = state.profile) {
   const g = p.game, s = g.streak;
   const today = todayStr(), yest = yesterdayStr();
   const ev = { frozenUsed: false, lost: false, lostCount: 0 };
-  if ((s.best || 0) < (s.count || 0)) s.best = s.count; // recuperează recordul din seria curentă
+  // recuperează recordul: max din seria curentă ȘI din ultima serie pierdută (înainte de
+  // câmpul `best` nu se salva nicăieri, dar seria pierdută rămâne în `lostStreak`)
+  const rec = Math.max(s.count || 0, s.lostStreak || 0);
+  if ((s.best || 0) < rec) s.best = rec;
   if (!s.lastDay || s.count === 0) return ev;
   if (s.lastDay === today || s.lastDay === yest) return ev;
   // A trecut cel puțin o zi fără activitate.
