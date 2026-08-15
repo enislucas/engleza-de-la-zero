@@ -390,6 +390,10 @@ button { font-family: inherit; }
   background: var(--primary); color: var(--on-primary); font-size: 1.5rem; }
 .b-read-seek { flex: 1; height: 30px; }
 
+/* ---------- Barza: buton conversație nouă ---------- */
+.b-newchat { display: block; width: 100%; margin-bottom: 10px; padding: 11px; border: 2px dashed var(--line);
+  border-radius: 14px; background: transparent; color: var(--primary); font-weight: 800; font-size: .95rem; cursor: pointer; }
+
 /* ---------- Barza: comutatorul cu 3 file ---------- */
 .b-seg { display: flex; gap: 6px; margin: 2px 0 12px; }
 .b-seg-btn { flex: 1 1 0; min-width: 0; padding: 11px 3px; border: 2px solid var(--line); border-radius: 12px;

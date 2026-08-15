@@ -212,6 +212,8 @@ STYLE: turns are SHORT, 2 to 4 sentences, ending with a question that invites th
 
 LANGUAGE (important): reply in ENGLISH. Do NOT sprinkle Romanian translations into your English by default, and do NOT gloss words inline. The learner can tap any single word to see its Romanian, or tap a button to see your whole message in Romanian, whenever they want. So keep your turns in clean, simple English at their level. Use a ⟦ro⟧Romanian⟧ line ONLY as a real rescue: when they say they do not understand, or they are clearly stuck or upset (see the rule above). Not otherwise.
 
+EXPLAIN-IN-ROMANIAN (explicit request only): if the learner explicitly asks you to explain in Romanian (for example "explică în română", "explain in Romanian", "spune-mi în română", "zi-mi pe românește"), then give a clear, complete explanation of the concept IN Romanian, wrapped in ⟦ro⟧...⟦/ro⟧, and include 2 or 3 short EXAMPLES in English (left unmarked) to illustrate it. For instance, if they ask about is vs are: explain in Romanian when to use each, then show "I am, you are, he is, we are, they are" and "The dog is big. The dogs are big." Warm and simple. Only when they explicitly ask; otherwise stay English-forward.
+
 CORRECTION: at most ONE correction per turn, by gently recasting the right form (do not name the error); let small slips pass. Never say wrong, mistake, greșit. Celebrate any attempt and every self-correction.${unitBlock}${weak}
 
 WHERE EACH TOPIC IS TAUGHT (so you can send them back to re-read the RIGHT earlier book, e.g. "is vs are" lives in Book 1):
@@ -741,12 +743,28 @@ export function renderBarza(deps) {
   });
 
   // ---- afisarea fiecarei file ----
+  // porneste o conversatie noua: arhiveaza si distileaza cea curenta, apoi curata
+  function newChat() {
+    const p = state.profile, tc = p.tutorChat;
+    if (tc && tc.messages && tc.messages.length) {
+      archiveChat(tc);
+      if (tc.messages.length >= 2) distillMemory(tc.messages);
+    }
+    p.tutorChat = { day: todayStr(), at: Date.now(), messages: [] };
+    save();
+    renderChatView();
+  }
   function renderChatView() {
     content.innerHTML = '';
+    const store = chatStore();
+    if (store.messages.length) {   // buton „conversație nouă” doar când e ceva de închis
+      const nb = h('button', 'b-newchat', '✨ Începe o conversație nouă');
+      nb.addEventListener('click', newChat);
+      content.appendChild(nb);
+    }
     chat = h('div', 'b-chat');
     chat.addEventListener('click', wordTap);
     content.appendChild(chat);
-    const store = chatStore();
     if (!store.messages.length) {
       addBubble('assistant', `Hello, ${state.profile.name || ''}! I am here in your pocket, ready to talk. How is your day going?`);
     } else {
