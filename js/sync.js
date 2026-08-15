@@ -33,6 +33,29 @@ export function capturePairing() {
   return false;
 }
 
+// aplică o împerechere LIPITĂ manual (linkul întreg sau doar codul). Necesară pe iPhone:
+// aplicația de pe ecranul principal e izolată de Safari, iar scanarea QR deschide Safari
+// (context gol) — așa că împerecherea se face din interiorul aplicației instalate.
+export function applyPairingString(s) {
+  s = String(s || '').trim();
+  let tok = null;
+  const m = s.match(/pair=([A-Za-z0-9_-]+)/);
+  if (m) tok = m[1];
+  else if (/^[A-Za-z0-9_-]{40,}$/.test(s)) tok = s;
+  if (!tok) return false;
+  try {
+    const parts = atob(tok.replace(/-/g, '+').replace(/_/g, '/')).split('|');
+    const urlOk = /^https?:\/\//.test(parts[0]);
+    if ((parts.length === 3 || parts.length === 7) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
+      cfg = { url: parts[0].replace(/\/+$/, ''), box: parts[1], key: parts[2] };
+      if (parts.length === 7) { cfg.tbox = parts[3]; cfg.tkey = parts[4]; cfg.gkey = parts[5]; cfg.who = parts[6]; }
+      localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 // configurația Barzei de buzunar (dacă linkul de împerechere a adus-o)
 export function tutorCfg() {
   return (cfg && cfg.gkey) ? cfg : null;

@@ -11,6 +11,7 @@ import { mascotSvg, CHEERS, SOFT_WRONG, RETRY_SOON, pick } from './mascot.js';
 import { speak, ttsAvailable, sttAvailable, stopSpeaking, listEnVoices, refreshVoice } from './speech.js';
 import { sfx } from './sound.js';
 import { renderBarza } from './barza.js';
+import { applyPairingString, syncActive, cloudPush } from './sync.js';
 
 const $app = () => document.getElementById('app');
 
@@ -1505,6 +1506,32 @@ function renderProfile() {
   });
   bk.appendChild(bimp);
   sc.appendChild(bk);
+
+  // ---- sincronizare familie (se lipește AICI, în aplicație — necesar pe iPhone) ----
+  const fam = h('div', 'card');
+  const famActive = syncActive();
+  fam.innerHTML = `<b>👨‍👩‍👧 Sincronizare familie</b>
+    <p class="sub mt8">${famActive
+      ? '✅ Activă. Progresul tău ajunge la Profesorul Barza și la panoul familiei.'
+      : 'Lipește aici linkul de activare primit de la Enis. Pe iPhone, fă asta din aplicația de pe ecranul principal (nu din Safari), ca să se lege de progresul tău real.'}</p>`;
+  const fta = h('textarea', 'type-in', '');
+  fta.placeholder = 'Lipește linkul de activare aici...';
+  fta.autocapitalize = 'off'; fta.autocomplete = 'off'; fta.spellcheck = false;
+  const fgo = h('button', 'btn btn-primary btn-big mt8', famActive ? 'Reactivează cu alt link' : 'Activează sincronizarea');
+  fgo.addEventListener('click', async () => {
+    let val = fta.value.trim();
+    if (!val) { try { val = (await navigator.clipboard.readText()).trim(); } catch (_) {} }
+    if (applyPairingString(val)) {
+      try { cloudPush(); } catch (_) {}
+      toast('Sincronizare activată! ✅');
+      renderProfile();
+    } else {
+      toast('Linkul nu e valid. Copiază-l din nou întreg.');
+    }
+  });
+  fam.appendChild(fta);
+  fam.appendChild(fgo);
+  sc.appendChild(fam);
 
   // ---- profiluri ----
   const pr = h('div', 'card');
