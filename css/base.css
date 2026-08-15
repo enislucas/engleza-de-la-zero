@@ -361,6 +361,37 @@ button { font-family: inherit; }
   border-radius: 50%; border: none; background: rgba(255,255,255,.25); color: #fff;
   font-size: 1.2rem; cursor: pointer; }
 
+/* ---------- Barza: traducere in romana la cerere ---------- */
+.b-tr-btn { display: inline-block; margin-top: 8px; padding: 5px 11px; border: 1px solid var(--line);
+  border-radius: 999px; background: transparent; color: var(--primary); font-size: .82rem; font-weight: 700;
+  cursor: pointer; }
+.b-tr-btn:disabled { opacity: .6; }
+.b-tr { margin-top: 7px; padding: 9px 12px; border-radius: 12px; font-size: .92rem; line-height: 1.5;
+  color: var(--text); background: color-mix(in srgb, var(--primary) 8%, var(--card));
+  border-left: 3px solid var(--primary); white-space: pre-wrap; }
+
+/* ---------- Barza: istoricul conversatiilor ---------- */
+.b-hist-btn { width: 100%; margin-bottom: 10px; padding: 11px; border: 2px dashed var(--line);
+  border-radius: 14px; background: transparent; color: var(--muted, var(--text)); font-weight: 700;
+  font-size: .92rem; cursor: pointer; }
+.b-hist-ov { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,.55);
+  display: flex; align-items: flex-end; justify-content: center; }
+.b-hist-card { width: 100%; max-width: 640px; max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--bg, #fff); border-radius: 20px 20px 0 0; overflow: hidden; }
+.b-hist-head { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.b-hist-t { font-weight: 800; font-size: 1.05rem; }
+.b-hist-x { margin-left: auto; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line);
+  background: transparent; color: var(--text); font-size: 1rem; cursor: pointer; }
+.b-hist-body { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.b-hist-item { text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--card); color: var(--text); font-size: .92rem; cursor: pointer; }
+.b-hist-item b { color: var(--primary); }
+.b-hist-back { align-self: flex-start; margin-bottom: 6px; padding: 7px 13px; border: 1px solid var(--line);
+  border-radius: 999px; background: transparent; color: var(--primary); font-weight: 700; cursor: pointer; }
+.b-hist-body .msg { max-width: 88%; padding: 10px 14px; border-radius: 16px; line-height: 1.5; }
+.b-hist-body .msg.user { align-self: flex-end; background: var(--primary); color: var(--on-primary); }
+.b-hist-body .msg.tutor { align-self: flex-start; background: var(--card); border: 1.5px solid var(--line); }
+
 /* ---------- Barza: cartea tiparita ---------- */
 .b-book { margin-bottom: 10px; }
 .b-book-t { font-weight: 800; font-size: .95rem; margin-bottom: 8px; }

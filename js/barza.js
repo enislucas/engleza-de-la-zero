@@ -7,7 +7,8 @@
 
 import { state, save, todayStr } from './state.js';
 import { tutorCfg, openBox, cloudPush, syncActive } from './sync.js';
-import { loadCourse, currentUnitIndex } from './course.js';
+import { loadCourse, loadUnit, currentUnitIndex } from './course.js';
+import { dueWords } from './engine.js';
 import { speak, stopSpeaking, sttAvailable, listenOnce, stopListening } from './speech.js';
 
 // NEfluxat (generateContent, nu streamGenerateContent): un singur JSON, robust pe iPhone
@@ -34,18 +35,32 @@ async function fetchMemory() {
   return memCache;
 }
 
-// ---------- istoricul de buzunar (călătorește cu progresul, prin sincronizare) ----------
+// ---------- sesiuni de conversatie (calatoresc cu progresul, prin sincronizare) ----------
+// La fiecare deschidere a aplicatiei = conversatie NOUA (context scurt = ieftin). Ziua/sesiunea
+// veche se arhiveaza pentru "istoric" si se distileaza in memorie. O pauza de 30 min sau o zi
+// noua inseamna sesiune noua.
+const SESSION_GAP_MS = 30 * 60 * 1000;
+
+function archiveChat(tc) {
+  const p = state.profile;
+  if (!p.tutorArchive) p.tutorArchive = [];
+  p.tutorArchive.push({ day: tc.day, at: tc.at || Date.now(), messages: (tc.messages || []).slice() });
+  while (p.tutorArchive.length > 20) p.tutorArchive.shift();  // pastram ultimele 20 de conversatii
+}
+
 function chatStore() {
   const p = state.profile;
-  if (!p.tutorChat) p.tutorChat = { day: todayStr(), messages: [] };
-  // in fiecare zi, conversatie noua: contextul (si costul) repornesc. INAINTE de a arunca
-  // ziua veche, o distilam in memorie chiar pe telefon (fara laptop), ca profesorul sa-si
-  // aminteasca omul de la o zi la alta.
-  if (p.tutorChat.day !== todayStr()) {
-    const old = p.tutorChat;
-    p.tutorChat = { day: todayStr(), messages: [] };
+  const now = Date.now();
+  if (!p.tutorChat) p.tutorChat = { day: todayStr(), at: now, messages: [] };
+  const tc = p.tutorChat;
+  const fresh = tc.day !== todayStr() || (now - (tc.at || 0)) > SESSION_GAP_MS;
+  if (fresh && tc.messages && tc.messages.length) {
+    archiveChat(tc);                                  // in istoric (fara cost)
+    if (tc.messages.length >= 2) distillMemory(tc.messages);  // in memorie (Gemini, debounced)
+    p.tutorChat = { day: todayStr(), at: now, messages: [] };
     save();
-    if (old.messages && old.messages.length >= 2) distillMemory(old.messages); // fire-and-forget
+  } else if (tc.day !== todayStr()) {
+    p.tutorChat = { day: todayStr(), at: now, messages: [] };
   }
   return p.tutorChat;
 }
@@ -58,6 +73,8 @@ async function distillMemory(msgs) {
     const cfg = tutorCfg();
     if (!cfg || !cfg.gkey) return;                 // fara cheie (neimperecheat): sarim
     const p = state.profile;
+    // cel mult o distilare la 2h: evita apeluri repetate daca deschid aplicatia des
+    if (Date.now() - ((p.tutorMemory && p.tutorMemory.lastDistillAt) || 0) < 2 * 3600 * 1000) return;
     const old = (p.tutorMemory && p.tutorMemory.text) || '';
     const today = todayStr();
     const transcript = msgs
@@ -82,17 +99,27 @@ Răspunde DOAR cu notițele actualizate.`;
       { temp: 0.3, maxTokens: 700 });
     addCost(usage);
     if (text && text.trim()) {
-      p.tutorMemory = { text: text.trim(), day: today };
+      p.tutorMemory = { text: text.trim(), day: today, lastDistillAt: Date.now() };
       save();
       try { if (syncActive()) cloudPush(); } catch (_) {}   // impinge memoria in cutie, pt. panou
     }
   } catch (_) { /* best-effort */ }
 }
+let _pushTimer = 0;
 function pushMsg(role, content) {
   const c = chatStore();
   c.messages.push({ role, content: String(content).slice(0, 2000) });
+  c.at = Date.now();                        // marcam activitatea (pentru granita de sesiune)
   while (c.messages.length > 40) c.messages.shift();
   save();
+  // impinge conversatia in cutia telefonului la scurt timp, ca panoul lui Enis sa o vada
+  // fara sa astepte laptopul. Debounce 4s ca sa nu impingem la fiecare tastare.
+  try {
+    if (syncActive()) {
+      clearTimeout(_pushTimer);
+      _pushTimer = setTimeout(() => { try { cloudPush(); } catch (_) {} }, 4000);
+    }
+  } catch (_) {}
 }
 
 // ---------- plafon de cost pe zi, pe persoana (ca sa nu se abuzeze API-ul) ----------
@@ -111,26 +138,69 @@ function addCost(usage) {
 }
 
 // ---------- promptul: același profesor, în buzunar ----------
-async function systemPrompt() {
-  const p = state.profile;
-  let appLevel = 1;
+// Harta scurtă a tuturor cărților (din meta, deja în memorie): ca profesorul din buzunar
+// să poată trimite la ORICE carte anterioară, la fel ca cel de acasă. Se calculează o dată.
+let BOOKMAP = null;
+async function bookMap() {
+  if (BOOKMAP != null) return BOOKMAP;
   try {
     const meta = await loadCourse();
-    appLevel = meta.units[currentUnitIndex(p, meta)].book;
+    BOOKMAP = meta.units.map(u => `Cartea ${u.book}: ${u.title}`
+      + ((u.lessonTitles && u.lessonTitles.length) ? ' — ' + u.lessonTitles.slice(0, 4).join('; ') : '')).join('\n');
+  } catch (_) { BOOKMAP = ''; }
+  return BOOKMAP;
+}
+
+async function systemPrompt() {
+  const p = state.profile;
+  let appLevel = 1, unit = null;
+  try {
+    const meta = await loadCourse();
+    const idx = currentUnitIndex(p, meta);
+    appLevel = meta.units[idx].book;
+    unit = await loadUnit(meta.units[idx].id);
   } catch (_) {}
-  // memoria distilata pe telefon are prioritate; cea de la laptop e rezerva (continuitate)
+  // materialul unității curente, ca profesorul de acasă: vocabular, gramatică, capcane
+  let unitBlock = '';
+  if (unit) {
+    const vocab = (unit.vocab || []).slice(0, 45).map(v => v.en).join(', ');
+    const gram = (unit.grammar || []).slice(0, 5).map(g => `${g.title}: ${String(g.body || '').slice(0, 140)}`).join(' | ');
+    const traps = (unit.traps || []).slice(0, 6).map(t => `NOT "${t.wrong}" BUT "${t.right}"`).join(' | ');
+    unitBlock = `\n\nCURRENT UNIT MATERIAL (teach from this, it is what they are studying now):\nVocabulary: ${vocab}\nGrammar: ${gram}\nTypical Romanian-speaker traps: ${traps}`;
+  }
+  // cuvinte slabe de reactivat (din SRS-ul telefonului)
+  let weak = '';
+  try {
+    const dw = unit ? dueWords([unit], p, 8) : [];
+    if (dw.length) weak = '\nWORDS TO REVIVE (weave 2 or 3 in naturally and make them USE the word, do not announce it): '
+      + dw.map(d => `${d.v.en} = ${d.v.ro}`).join('; ');
+  } catch (_) {}
+  const bmap = await bookMap();
+  // memoria distilată pe telefon are prioritate; cea de la laptop e rezervă (continuitate)
   const localMem = (p.tutorMemory && p.tutorMemory.text) || '';
   const mem = localMem ? { text: localMem } : await fetchMemory();
   const bp = p.bookProgress || {};
   const bookLine = bp.book
-    ? `They are reading the PRINTED book series (separate from the app, at their own pace): currently Book ${bp.book} of 24${bp.note ? ', ' + bp.note : ''}. Pitch what you reference to what they have actually read on paper.`
+    ? `They are reading the PRINTED book series (separate from the app, at their own pace): currently Book ${bp.book} of 24${bp.note ? ', ' + bp.note : ''}. Reference material they have likely read on paper.`
     : `They have not recorded printed-book progress yet.`;
   return `You are Profesorul Barza, a warm, patient English tutor for Romanian adults aged 55+, here in "pocket" form on the learner's phone. The learner is ${p.name || 'the learner'}. Their phone-app level is around unit ${appLevel} of 24 (use it to gauge difficulty). ${bookLine}
 
-MARKUP PROTOCOL (mandatory): wrap EVERY Romanian span in ⟦ro⟧...⟦/ro⟧. English stays unmarked. If (and only if) you correct a mistake, put ONE ⟦corr⟧...⟦/corr⟧ block at the very end. No other markup, no markdown, no asterisks, no em dashes.
+MARKUP PROTOCOL (mandatory): wrap EVERY Romanian span in ⟦ro⟧...⟦/ro⟧. English stays unmarked. If (and only if) you correct a mistake, put ONE ⟦corr⟧...⟦/corr⟧ block at the very end. No other markup, no markdown, no asterisks, no em or en dashes.
 
-STYLE: turns are SHORT, 2 to 4 sentences, ending with a question that invites the learner to speak. React like a friendly person first, teach second. Correct at most ONE mistake per turn, by naturally recasting; let small errors go. Match difficulty to app-unit ${appLevel} of 24: use words the learner likely knows, one small step above. If the learner writes Romanian, answer mostly in simple English with a short ⟦ro⟧...⟦/ro⟧ helper. Keep topics to everyday life, family, work, travel and the cultures they are curious about, suitable for this couple.
-${mem.text ? '\nWhat you remember about this learner from previous days (use it naturally, do not recite it):\n' + mem.text : ''}`;
+RESPOND TO WHAT THEY SAID (most important rule):
+- ALWAYS answer the actual content and feeling of their message. NEVER ignore it and jump to an unrelated question. Do not fire random topics like "what is your favourite colour" when they did not open that door.
+- If they express a FEELING or difficulty (frustration, "mă enervează", "nu știu", "e greu", "mă simt prost"): first acknowledge it warmly, in simple English WITH a ⟦ro⟧Romanian⟧ line so they surely feel understood, reassure them, THEN continue gently on that same subject.
+- If they say "nu înțeleg" / "I don't understand" / seem lost: STOP, gently say sorry, and re-say your PREVIOUS point in much simpler English PLUS a full ⟦ro⟧traducere completă⟦/ro⟧. Do NOT change the subject and do NOT ask a new question until they are back with you.
+- Example of the RIGHT move: learner says ⟦ro⟧"Mă enervează, nu știu să scriu dar înțeleg."⟦/ro⟧ Good reply: "That is completely normal, and understanding is the hardest part, you already have it. ⟦ro⟧E absolut normal. Cel mai greu e să înțelegi, iar tu deja înțelegi. Scrisul vine cu puțin exercițiu.⟦/ro⟧ Let us write ONE tiny sentence together: try 'I am tired today.' Can you copy it?"
+
+STYLE: turns are SHORT, 2 to 4 sentences, ending with a question that invites them to speak. Friendly person first, teacher second. Match difficulty to app-unit ${appLevel} of 24 and to the unit vocabulary below: use words they likely know, one small step above. When they write in Romanian, reply mostly in simple English but ALWAYS add a ⟦ro⟧Romanian support line⟧. The learner can tap any of your messages to see the full Romanian, so keep your English natural and gloss only genuinely new or hard words inline.
+
+CORRECTION: at most ONE correction per turn, by gently recasting the right form (do not name the error); let small slips pass. Never say wrong, mistake, greșit. Celebrate any attempt and every self-correction.${unitBlock}${weak}
+
+WHERE EACH TOPIC IS TAUGHT (so you can send them back to re-read the RIGHT earlier book, e.g. "is vs are" lives in Book 1):
+${bmap}
+When they ask about a grammar point, answer it simply now AND name the exact earlier book to re-read, in Romanian, e.g. ⟦ro⟧Asta e explicat pe îndelete în Cartea 1, merită s-o recitești.⟦/ro⟧ If they ask for a small table (e.g. is/are), give a tiny clean one as short aligned lines, no markdown. Gently remind, once in a while, that the words stick when they also read the book and talk with you, not only from the app drills. Never nag.
+${mem.text ? '\nWHAT YOU REMEMBER about this learner from before (use naturally, do not recite):\n' + mem.text : ''}`;
 }
 
 // ---------- apelul Gemini (NEfluxat: robust pe iPhone, unde fetch-ul in flux e capricios) ----------
@@ -155,6 +225,21 @@ async function callGemini(sys, history, opts = {}) {
   const text = ((j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [])
     .map(p => p.text || '').join('');
   return { text, usage: j.usageMetadata || null };
+}
+
+// ---------- traducere in romana la cerere (doar cand apasa; ieftin, cu cache) ----------
+const TR_CACHE = new Map();
+function plainText(raw) {
+  return String(raw).replace(/⟦corr⟧[\s\S]*?(⟦\/corr⟧|$)/g, '').replace(/⟦[^⟧]*⟧/g, '').replace(/\s+/g, ' ').trim();
+}
+async function translateRo(text) {
+  if (TR_CACHE.has(text)) return TR_CACHE.get(text);
+  const sys = 'Ești traducător. Tradu mesajul următor în română naturală, simplă și caldă, pentru un adult de 55+. Răspunde DOAR cu traducerea, text simplu, fără explicații sau ghilimele.';
+  const { text: ro, usage } = await callGemini(sys, [{ role: 'user', content: text }], { temp: 0.2, maxTokens: 320 });
+  addCost(usage);
+  const out = (ro || '').trim();
+  if (out) TR_CACHE.set(text, out);
+  return out;
 }
 
 // ---------- redare: markere -> bule frumoase + voce ----------
@@ -234,6 +319,49 @@ async function videoShelf(cfgAll) {
   }
   return wrap;
 }
+// ---------- istoricul conversatiilor (citire) ----------
+function showHistory() {
+  const arch = (state.profile.tutorArchive || []).slice().reverse(); // cea mai recenta prima
+  const ov = h('div', 'b-hist-ov');
+  const card = h('div', 'b-hist-card');
+  const head = h('div', 'b-hist-head');
+  head.appendChild(h('div', 'b-hist-t', '📜 Conversații vechi'));
+  const x = h('button', 'b-hist-x', '✕');
+  x.addEventListener('click', () => ov.remove());
+  head.appendChild(x);
+  card.appendChild(head);
+  const body = h('div', 'b-hist-body');
+  card.appendChild(body);
+
+  const list = () => {
+    body.innerHTML = '';
+    if (!arch.length) { body.appendChild(h('div', 'sub tc', 'Nicio conversație veche încă.')); return; }
+    for (const s of arch) {
+      const d = new Date(s.at || 0);
+      const when = d.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' }) + ' ' +
+        String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      const first = (s.messages.find(m => m.role === 'user') || {}).content || '(fără text)';
+      const item = h('button', 'b-hist-item', `<b>${esc(when)}</b> · ${esc(String(first).slice(0, 60))}`);
+      item.addEventListener('click', () => openSession(s, list));
+      body.appendChild(item);
+    }
+  };
+  const openSession = (s, back) => {
+    body.innerHTML = '';
+    const bk = h('button', 'b-hist-back', '‹ Înapoi la listă');
+    bk.addEventListener('click', back);
+    body.appendChild(bk);
+    for (const m of s.messages) {
+      const b = h('div', 'msg ' + (m.role === 'user' ? 'user' : 'tutor'));
+      if (m.role === 'user') b.textContent = m.content; else renderRich(b, m.content);
+      body.appendChild(b);
+    }
+  };
+  list();
+  ov.appendChild(card);
+  document.body.appendChild(ov);
+}
+
 function openVideo(src) {
   const ov = h('div', 'b-video-ov');
   const vid = document.createElement('video');
@@ -287,26 +415,52 @@ export function renderBarza(deps) {
     bc.querySelector('.b-book-msg').textContent = book ? `✓ Salvat: Cartea ${book}${note ? ', ' + note : ''}` : '✓ Salvat';
   });
 
+  // bara cu istoricul conversatiilor vechi (fiecare deschidere = conversatie noua)
+  const arch = state.profile.tutorArchive || [];
+  if (arch.length) {
+    const hb = h('button', 'b-hist-btn', `📜 Conversații vechi (${arch.length})`);
+    hb.addEventListener('click', showHistory);
+    sc.appendChild(hb);
+  }
+
   const chat = h('div', 'b-chat');
   sc.appendChild(chat);
   const store = chatStore();
+  // buton „🇷🇴 în română” sub bula profesorului: traduce la cerere, cache, se ascunde/arata
+  const attachTranslate = (target, raw) => {
+    const en = plainText(raw);
+    if (!en) return;
+    const btn = h('button', 'b-tr-btn', '🇷🇴 în română');
+    const box = h('div', 'b-tr'); box.style.display = 'none';
+    btn.addEventListener('click', async () => {
+      if (box.textContent) { // deja tradus: doar comuta
+        const show = box.style.display === 'none';
+        box.style.display = show ? 'block' : 'none';
+        btn.textContent = show ? '🇷🇴 ascunde' : '🇷🇴 în română';
+        return;
+      }
+      btn.disabled = true; btn.textContent = '… traduc';
+      try { box.textContent = (await translateRo(en)) || '(nu am putut traduce)'; }
+      catch (_) { box.textContent = '(nu am putut traduce acum)'; }
+      box.style.display = 'block'; btn.disabled = false; btn.textContent = '🇷🇴 ascunde';
+    });
+    target.appendChild(btn);
+    target.appendChild(box);
+  };
   const addBubble = (role, content) => {
     const b = h('div', 'msg ' + (role === 'user' ? 'user' : 'tutor'));
-    if (role === 'user') b.textContent = content;
-    else {
-      const corr = renderRich(b, content);
-      if (corr) {
-        const cn = h('div', 'corr');
-        cn.appendChild(h('div', 'corr-t', 'Observație'));
-        const body = h('div');
-        renderRich(body, corr);
-        cn.appendChild(body);
-        chat.appendChild(b);
-        chat.appendChild(cn);
-        return b;
-      }
-    }
+    if (role === 'user') { b.textContent = content; chat.appendChild(b); return b; }
+    const corr = renderRich(b, content);
     chat.appendChild(b);
+    attachTranslate(b, content);
+    if (corr) {
+      const cn = h('div', 'corr');
+      cn.appendChild(h('div', 'corr-t', 'Observație'));
+      const body = h('div');
+      renderRich(body, corr);
+      cn.appendChild(body);
+      chat.appendChild(cn);
+    }
     return b;
   };
   if (!store.messages.length) {
@@ -342,16 +496,19 @@ export function renderBarza(deps) {
     inp.value = '';
     addBubble('user', text);
     pushMsg('user', text);
-    const bubble = addBubble('assistant', 'Profesorul scrie...');
+    const bubble = h('div', 'msg tutor');           // rezervor: fara buton de traducere pana vine textul
+    bubble.textContent = 'Profesorul scrie…';
+    chat.appendChild(bubble);
     chat.scrollTop = chat.scrollHeight;
     window.scrollTo(0, document.body.scrollHeight);
     try {
       const sys = await systemPrompt();
-      const ctx = chatStore().messages.slice(-12);
+      const ctx = chatStore().messages.slice(-12);   // context scurt = ieftin
       const { text: raw, usage } = await callGemini(sys, ctx);
       addCost(usage);
       if (!raw) throw new Error('raspuns gol');
       const corr = renderRich(bubble, raw);
+      attachTranslate(bubble, raw);                  // 🇷🇴 sub raspuns
       if (corr) {
         const cn = h('div', 'corr');
         cn.appendChild(h('div', 'corr-t', 'Observație'));
