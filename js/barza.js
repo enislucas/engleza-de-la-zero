@@ -198,7 +198,9 @@ RESPOND TO WHAT THEY SAID (most important rule):
 - If they say "nu înțeleg" / "I don't understand" / seem lost: STOP, gently say sorry, and re-say your PREVIOUS point in much simpler English PLUS a full ⟦ro⟧traducere completă⟦/ro⟧. Do NOT change the subject and do NOT ask a new question until they are back with you.
 - Example of the RIGHT move: learner says ⟦ro⟧"Mă enervează, nu știu să scriu dar înțeleg."⟦/ro⟧ Good reply: "That is completely normal, and understanding is the hardest part, you already have it. ⟦ro⟧E absolut normal. Cel mai greu e să înțelegi, iar tu deja înțelegi. Scrisul vine cu puțin exercițiu.⟦/ro⟧ Let us write ONE tiny sentence together: try 'I am tired today.' Can you copy it?"
 
-STYLE: turns are SHORT, 2 to 4 sentences, ending with a question that invites them to speak. Friendly person first, teacher second. Match difficulty to app-unit ${appLevel} of 24 and to the unit vocabulary below: use words they likely know, one small step above. When they write in Romanian, reply mostly in simple English but ALWAYS add a ⟦ro⟧Romanian support line⟧. The learner can tap any of your messages to see the full Romanian, so keep your English natural and gloss only genuinely new or hard words inline.
+STYLE: turns are SHORT, 2 to 4 sentences, ending with a question that invites them to speak. Friendly person first, teacher second. Match difficulty to app-unit ${appLevel} of 24 and to the unit vocabulary below: use words they likely know, one small step above.
+
+LANGUAGE (important): reply in ENGLISH. Do NOT sprinkle Romanian translations into your English by default, and do NOT gloss words inline. The learner can tap any single word to see its Romanian, or tap a button to see your whole message in Romanian, whenever they want. So keep your turns in clean, simple English at their level. Use a ⟦ro⟧Romanian⟧ line ONLY as a real rescue: when they say they do not understand, or they are clearly stuck or upset (see the rule above). Not otherwise.
 
 CORRECTION: at most ONE correction per turn, by gently recasting the right form (do not name the error); let small slips pass. Never say wrong, mistake, greșit. Celebrate any attempt and every self-correction.${unitBlock}${weak}
 
@@ -496,7 +498,7 @@ export function renderBarza(deps) {
   // ---- comutatorul cu 3 file: Conversație / Istoric / Podcasturi ----
   let view = 'chat';
   const seg = h('div', 'b-seg');
-  const TABS = [['chat', '💬 Conversație'], ['hist', '📜 Istoric'], ['pods', '🎬 Podcasturi']];
+  const TABS = [['chat', '💬 Vorbim'], ['hist', '📜 Istoric'], ['pods', '🎬 Podcast']];
   const tabBtns = {};
   TABS.forEach(([v, label]) => {
     const b = h('button', 'b-seg-btn', label);
@@ -629,7 +631,7 @@ export function renderBarza(deps) {
     content.appendChild(chat);
     const store = chatStore();
     if (!store.messages.length) {
-      addBubble('assistant', `Hello, ${state.profile.name || ''}! I am here, in your pocket. ⟦ro⟧Sunt aici, în buzunarul tău. Vorbim puțin în engleză?⟦/ro⟧ How is your day going?`);
+      addBubble('assistant', `Hello, ${state.profile.name || ''}! I am here in your pocket, ready to talk. How is your day going?`);
     } else {
       for (const m of store.messages) addBubble(m.role, m.content);
     }
