@@ -483,42 +483,6 @@ export function renderBarza(deps) {
     return;
   }
 
-  videoShelf(cfg).then(shelf => sc.insertBefore(shelf, sc.firstChild));
-
-  // cartile tiparite: al treilea drum, actualizat de mana (aplicatia nu stie ce citesc pe hartie)
-  const bp = state.profile.bookProgress || { book: 0, note: '', at: 0 };
-  const bc = h('div', 'card b-book');
-  const opts = ['<option value="0">— nicio carte încă —</option>'];
-  for (let i = 1; i <= 24; i++) opts.push(`<option value="${i}"${bp.book === i ? ' selected' : ''}>Cartea ${i}</option>`);
-  bc.innerHTML = `<div class="b-book-t">📕 Cartea tipărită la care ești</div>
-    <div class="b-book-row">
-      <select class="b-book-sel">${opts.join('')}</select>
-      <input class="b-book-note" inputmode="text" placeholder="pagina sau lecția" value="${esc(bp.note || '')}">
-      <button class="b-book-save">Salvează</button>
-    </div>
-    <div class="b-book-msg muted">${bp.book ? 'Acum: Cartea ' + bp.book + (bp.note ? ', ' + esc(bp.note) : '') : 'Spune-i profesorului ce carte citești pe hârtie.'}</div>`;
-  sc.appendChild(bc);
-  bc.querySelector('.b-book-save').addEventListener('click', () => {
-    const book = parseInt(bc.querySelector('.b-book-sel').value, 10) || 0;
-    const note = bc.querySelector('.b-book-note').value.trim().slice(0, 40);
-    state.profile.bookProgress = { book, note, at: Date.now() };
-    save(true);
-    memCache.t = 0; // reincarcam contextul ca profesorul sa stie pe loc
-    bc.querySelector('.b-book-msg').textContent = book ? `✓ Salvat: Cartea ${book}${note ? ', ' + note : ''}` : '✓ Salvat';
-  });
-
-  // bara cu istoricul conversatiilor vechi (fiecare deschidere = conversatie noua)
-  const arch = state.profile.tutorArchive || [];
-  if (arch.length) {
-    const hb = h('button', 'b-hist-btn', `📜 Conversații vechi (${arch.length})`);
-    hb.addEventListener('click', showHistory);
-    sc.appendChild(hb);
-  }
-
-  const chat = h('div', 'b-chat');
-  sc.appendChild(chat);
-  const store = chatStore();
-
   // seed dictionar (curenta + 2 precedente) ca taparea pe cuvant sa fie gratis pentru
   // cuvintele din carti; restul se traduc cu un apel mic la nevoie
   (async () => {
@@ -528,15 +492,39 @@ export function renderBarza(deps) {
       for (const j of [idx, idx - 1, idx - 2]) if (meta.units[j]) seedDict(await loadUnit(meta.units[j].id));
     } catch (_) {}
   })();
-  // tap pe un cuvant englezesc din raspunsul profesorului -> traducerea lui, deasupra
-  chat.addEventListener('click', async (e) => {
+
+  // ---- comutatorul cu 3 file: Conversație / Istoric / Podcasturi ----
+  let view = 'chat';
+  const seg = h('div', 'b-seg');
+  const TABS = [['chat', '💬 Conversație'], ['hist', '📜 Istoric'], ['pods', '🎬 Podcasturi']];
+  const tabBtns = {};
+  TABS.forEach(([v, label]) => {
+    const b = h('button', 'b-seg-btn', label);
+    b.addEventListener('click', () => { view = v; show(); });
+    seg.appendChild(b); tabBtns[v] = b;
+  });
+  sc.appendChild(seg);
+  const content = h('div', 'b-content');
+  sc.appendChild(content);
+
+  // ---- compozitorul (o singura data; se ascunde in afara conversatiei) ----
+  const row = h('div', 'b-composer');
+  const mic = h('button', 'b-mic', '🎤');
+  const inp = h('textarea', 'b-in');
+  inp.placeholder = 'Scrie sau apasă 🎤...';
+  inp.rows = 1;
+  const send = h('button', 'b-send', '➤');
+  row.appendChild(mic); row.appendChild(inp); row.appendChild(send);
+  a.insertBefore(row, a.querySelector('.navbar'));
+
+  let chat = null;         // reasignat la fiecare afisare a conversatiei
+  let lastVoice = false;   // ultimul mesaj a venit prin microfon? (atunci: Gemini)
+  const wordTap = async (e) => {
     const w = e.target.closest && e.target.closest('.b-w');
     if (!w) return;
     showWordTip(w, '…');
-    try { showWordTip(w, (await wordRo(w.textContent)) || '(?)'); }
-    catch (_) { showWordTip(w, '(?)'); }
-  });
-  let lastVoice = false;   // ultimul mesaj a venit prin microfon? (atunci: Gemini)
+    try { showWordTip(w, (await wordRo(w.textContent)) || '(?)'); } catch (_) { showWordTip(w, '(?)'); }
+  };
 
   // buton „🇷🇴 în română” sub bula profesorului: traduce la cerere, cache, se ascunde/arata
   const attachTranslate = (target, raw) => {
@@ -545,10 +533,10 @@ export function renderBarza(deps) {
     const btn = h('button', 'b-tr-btn', '🇷🇴 în română');
     const box = h('div', 'b-tr'); box.style.display = 'none';
     btn.addEventListener('click', async () => {
-      if (box.textContent) { // deja tradus: doar comuta
-        const show = box.style.display === 'none';
-        box.style.display = show ? 'block' : 'none';
-        btn.textContent = show ? '🇷🇴 ascunde' : '🇷🇴 în română';
+      if (box.textContent) {
+        const s = box.style.display === 'none';
+        box.style.display = s ? 'block' : 'none';
+        btn.textContent = s ? '🇷🇴 ascunde' : '🇷🇴 în română';
         return;
       }
       btn.disabled = true; btn.textContent = '… traduc';
@@ -559,59 +547,37 @@ export function renderBarza(deps) {
     target.appendChild(btn);
     target.appendChild(box);
   };
-  const addBubble = (role, content) => {
+  const addBubble = (role, content2) => {
     const b = h('div', 'msg ' + (role === 'user' ? 'user' : 'tutor'));
-    if (role === 'user') { b.textContent = content; chat.appendChild(b); return b; }
-    const corr = renderRich(b, content, { words: true });   // cuvinte tapabile
+    if (role === 'user') { b.textContent = content2; chat.appendChild(b); return b; }
+    const corr = renderRich(b, content2, { words: true });
     chat.appendChild(b);
-    attachTranslate(b, content);
+    attachTranslate(b, content2);
     if (corr) {
       const cn = h('div', 'corr');
       cn.appendChild(h('div', 'corr-t', 'Observație'));
-      const body = h('div');
-      renderRich(body, corr);
-      cn.appendChild(body);
+      const body = h('div'); renderRich(body, corr); cn.appendChild(body);
       chat.appendChild(cn);
     }
     return b;
   };
-  if (!store.messages.length) {
-    addBubble('assistant', `Hello, ${state.profile.name || ''}! I am here, in your pocket. ⟦ro⟧Sunt aici, în buzunarul tău. Vorbim puțin în engleză?⟦/ro⟧ How is your day going?`);
-  } else {
-    for (const m of store.messages) addBubble(m.role, m.content);
-  }
-
-  const row = h('div', 'b-composer');
-  const mic = h('button', 'b-mic', '🎤');
-  const inp = h('textarea', 'b-in');
-  inp.placeholder = 'Scrie sau apasă 🎤...';
-  inp.rows = 1;
-  const send = h('button', 'b-send', '➤');
-  row.appendChild(mic); row.appendChild(inp); row.appendChild(send);
-  a.insertBefore(row, a.querySelector('.navbar'));
 
   let busy = false;
   async function doSend() {
     const text = inp.value.trim();
     if (!text || busy) return;
-    // plafon zilnic: dupa ~1.5$ pe zi, profesorul propune sa continue maine (fara alt apel platit)
-    if (costStore().usd >= DAILY_CAP_USD) {
-      addBubble('user', text);
-      pushMsg('user', text);
+    if (costStore().usd >= DAILY_CAP_USD) {   // plafon zilnic pe persoana
+      addBubble('user', text); pushMsg('user', text);
       addBubble('assistant', 'Am vorbit frumos și mult azi! ⟦ro⟧Hai să ne odihnim și continuăm mâine, cu forțe noi.⟦/ro⟧ See you tomorrow!');
-      inp.value = '';
-      window.scrollTo(0, document.body.scrollHeight);
-      return;
+      inp.value = ''; window.scrollTo(0, document.body.scrollHeight); return;
     }
     busy = true; send.disabled = true;
     stopSpeaking();
     inp.value = '';
-    addBubble('user', text);
-    pushMsg('user', text);
-    const bubble = h('div', 'msg tutor');           // rezervor: fara buton de traducere pana vine textul
+    addBubble('user', text); pushMsg('user', text);
+    const bubble = h('div', 'msg tutor');
     bubble.textContent = 'Profesorul scrie…';
     chat.appendChild(bubble);
-    chat.scrollTop = chat.scrollHeight;
     window.scrollTo(0, document.body.scrollHeight);
     try {
       const sys = await systemPrompt();
@@ -623,13 +589,11 @@ export function renderBarza(deps) {
       const raw = r.text;
       if (!raw) throw new Error('raspuns gol');
       const corr = renderRich(bubble, raw, { words: true });
-      attachTranslate(bubble, raw);                  // 🇷🇴 sub raspuns
+      attachTranslate(bubble, raw);
       if (corr) {
         const cn = h('div', 'corr');
         cn.appendChild(h('div', 'corr-t', 'Observație'));
-        const body = h('div');
-        renderRich(body, corr);
-        cn.appendChild(body);
+        const body = h('div'); renderRich(body, corr); cn.appendChild(body);
         bubble.after(cn);
       }
       pushMsg('assistant', raw);
@@ -643,7 +607,6 @@ export function renderBarza(deps) {
   }
   send.addEventListener('click', doSend);
   inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
-
   let listening = false;
   mic.addEventListener('click', async () => {
     if (listening) { stopListening(); listening = false; mic.classList.remove('rec'); return; }
@@ -658,5 +621,79 @@ export function renderBarza(deps) {
     inp.focus();
   });
 
-  window.scrollTo(0, document.body.scrollHeight);
+  // ---- afisarea fiecarei file ----
+  function renderChatView() {
+    content.innerHTML = '';
+    chat = h('div', 'b-chat');
+    chat.addEventListener('click', wordTap);
+    content.appendChild(chat);
+    const store = chatStore();
+    if (!store.messages.length) {
+      addBubble('assistant', `Hello, ${state.profile.name || ''}! I am here, in your pocket. ⟦ro⟧Sunt aici, în buzunarul tău. Vorbim puțin în engleză?⟦/ro⟧ How is your day going?`);
+    } else {
+      for (const m of store.messages) addBubble(m.role, m.content);
+    }
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+  function renderHistView() {
+    content.innerHTML = '';
+    const arch = (state.profile.tutorArchive || []).slice().reverse();
+    if (!arch.length) {
+      content.appendChild(h('div', 'card tc sub', 'Nicio conversație veche încă. Fiecare deschidere începe o conversație nouă, iar cele vechi apar aici.'));
+      return;
+    }
+    for (const s of arch) {
+      const d = new Date(s.at || 0);
+      const when = d.toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' }) + ' ' +
+        String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      const first = (s.messages.find(m => m.role === 'user') || {}).content || '(fără text)';
+      const card = h('div', 'card');
+      card.innerHTML = `<div class="b-hist-when">📅 ${esc(when)} · ${s.messages.length} mesaje</div>
+        <div class="b-hist-prev">${esc(String(first).slice(0, 90))}</div>`;
+      const rowb = h('div', 'row mt8');
+      const openB = h('button', 'btn grow', '👁 Vezi');
+      const contB = h('button', 'btn btn-primary grow', '↩ Continuă');
+      openB.addEventListener('click', () => viewSession(s));
+      contB.addEventListener('click', () => resumeSession(s));
+      rowb.appendChild(openB); rowb.appendChild(contB);
+      card.appendChild(rowb);
+      content.appendChild(card);
+    }
+  }
+  function viewSession(s) {
+    content.innerHTML = '';
+    const back = h('button', 'b-hist-back', '‹ Înapoi la listă');
+    back.addEventListener('click', renderHistView);
+    content.appendChild(back);
+    const box = h('div', 'b-chat');
+    box.addEventListener('click', wordTap);
+    for (const m of s.messages) {
+      const b = h('div', 'msg ' + (m.role === 'user' ? 'user' : 'tutor'));
+      if (m.role === 'user') b.textContent = m.content; else renderRich(b, m.content, { words: true });
+      box.appendChild(b);
+    }
+    content.appendChild(box);
+    const cont = h('button', 'btn btn-primary btn-big mt8', '↩ Continuă această conversație');
+    cont.addEventListener('click', () => resumeSession(s));
+    content.appendChild(cont);
+  }
+  function resumeSession(s) {
+    const p = state.profile;
+    p.tutorChat = { day: todayStr(), at: Date.now(), messages: (s.messages || []).slice() };
+    p.tutorArchive = (p.tutorArchive || []).filter(x => x !== s);  // nu o dublam
+    save();
+    view = 'chat'; show();
+  }
+  function renderPodsView() {
+    content.innerHTML = '';
+    videoShelf(cfg).then(shelf => content.appendChild(shelf));
+  }
+  function show() {
+    Object.keys(tabBtns).forEach(v => tabBtns[v].classList.toggle('on', v === view));
+    row.style.display = (view === 'chat') ? '' : 'none';   // compozitorul doar in conversatie
+    if (view === 'chat') renderChatView();
+    else if (view === 'hist') renderHistView();
+    else renderPodsView();
+  }
+  show();
 }

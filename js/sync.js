@@ -21,11 +21,17 @@ function storeParts(parts) {
   if (parts.length >= 8 && parts[7]) cfg.dkey = parts[7];
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
 }
+// decodează base64url robust (adaugă padding-ul lipsă, altfel atob poate refuza tokenul)
+function decodeToken(tok) {
+  let b = tok.replace(/-/g, '+').replace(/_/g, '/');
+  b += '='.repeat((4 - (b.length % 4)) % 4);
+  return atob(b);
+}
 export function capturePairing() {
   const m = (location.hash || '').match(/#?pair=([A-Za-z0-9_-]+)/);
   if (!m) return false;
   try {
-    const parts = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')).split('|');
+    const parts = decodeToken(m[1]).split('|');
     const urlOk = /^https:\/\//.test(parts[0]) || /^http:\/\/(127\.0\.0\.1|localhost)/.test(parts[0]);
     if ([3, 7, 8].includes(parts.length) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
       storeParts(parts);
@@ -47,7 +53,7 @@ export function applyPairingString(s) {
   else if (/^[A-Za-z0-9_-]{40,}$/.test(s)) tok = s;
   if (!tok) return false;
   try {
-    const parts = atob(tok.replace(/-/g, '+').replace(/_/g, '/')).split('|');
+    const parts = decodeToken(tok).split('|');
     const urlOk = /^https?:\/\//.test(parts[0]);
     if ([3, 7, 8].includes(parts.length) && urlOk && parts[1].length >= 16 && parts[2].length >= 32) {
       storeParts(parts);

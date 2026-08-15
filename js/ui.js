@@ -1367,6 +1367,30 @@ function renderProfile() {
   const p = state.profile, g = p.game;
 
   sc.appendChild(h('div', 'h1', `${esc(p.avatar)} ${esc(p.name)}`));
+
+  // cartea tipărită la care ești — primul lucru din profil (mutat din meniul Barza)
+  const bp0 = p.bookProgress || { book: 0, note: '', at: 0 };
+  const bcard = h('div', 'card b-book');
+  const bopts = ['<option value="0">— nicio carte încă —</option>'];
+  for (let i = 1; i <= 24; i++) bopts.push(`<option value="${i}"${bp0.book === i ? ' selected' : ''}>Cartea ${i}</option>`);
+  bcard.innerHTML = `<div class="b-book-t">📕 Cartea tipărită la care ești</div>
+    <p class="set-d" style="margin:2px 0 10px">Spune-i Profesorului ce carte citești pe hârtie, ca să te ajute de acolo.</p>
+    <div class="b-book-row">
+      <select class="b-book-sel">${bopts.join('')}</select>
+      <input class="b-book-note" inputmode="text" placeholder="pagina sau lecția" value="${esc(bp0.note || '')}">
+      <button class="b-book-save btn btn-primary">Salvează</button>
+    </div>
+    <div class="b-book-msg muted" style="margin-top:8px">${bp0.book ? 'Acum: Cartea ' + bp0.book + (bp0.note ? ', ' + esc(bp0.note) : '') : ''}</div>`;
+  bcard.querySelector('.b-book-save').addEventListener('click', () => {
+    const book = parseInt(bcard.querySelector('.b-book-sel').value, 10) || 0;
+    const note = bcard.querySelector('.b-book-note').value.trim().slice(0, 40);
+    p.bookProgress = { book, note, at: Date.now() };
+    save(true);
+    try { cloudPush(); } catch (_) {}
+    bcard.querySelector('.b-book-msg').textContent = book ? `✓ Salvat: Cartea ${book}${note ? ', ' + note : ''}` : '✓ Salvat';
+  });
+  sc.appendChild(bcard);
+
   const words = Object.values(g.words);
   const learned = words.filter(w => w.s >= 3).length;
   const activeDays = Object.keys(g.stats.days).length;
@@ -1401,7 +1425,7 @@ function renderProfile() {
   set.appendChild(h('b', '', 'Setări'));
 
   // temă
-  const rowT = h('div', 'set-row');
+  const rowT = h('div', 'set-row col');
   rowT.appendChild(h('div', '', '<div class="set-l">Aspect</div><div class="set-d">Culorile aplicației</div>'));
   const segT = h('div', 'seg');
   THEMES.forEach(t => {
@@ -1413,10 +1437,10 @@ function renderProfile() {
   set.appendChild(rowT);
 
   // mărime text
-  const rowF = h('div', 'set-row');
+  const rowF = h('div', 'set-row col');
   rowF.appendChild(h('div', '', '<div class="set-l">Mărimea textului</div>'));
   const segF = h('div', 'seg');
-  [['1', 'Normal'], ['1.15', 'Mare'], ['1.3', 'F. mare']].forEach(([v, l]) => {
+  [['1', 'Normal'], ['1.15', 'Mare'], ['1.3', 'Foarte mare']].forEach(([v, l]) => {
     const b = h('button', Math.abs(p.fontScale - Number(v)) < 0.01 ? 'on' : '', l);
     b.addEventListener('click', () => { p.fontScale = Number(v); save(true); applyPrefs(); renderProfile(); });
     segF.appendChild(b);
@@ -1463,7 +1487,7 @@ function renderProfile() {
   }
 
   // sunete
-  const rowS = h('div', 'set-row');
+  const rowS = h('div', 'set-row col');
   rowS.appendChild(h('div', '', '<div class="set-l">Sunete</div><div class="set-d">Efecte la răspunsuri</div>'));
   const segS = h('div', 'seg');
   [['on', 'Pornit'], ['off', 'Oprit']].forEach(([v, l]) => {
@@ -1496,45 +1520,6 @@ function renderProfile() {
   trav.appendChild(tb);
   if (s.travel && s.travelStart) trav.appendChild(h('p', 'sub mt8', `Activ din ${s.travelStart}.`));
   sc.appendChild(trav);
-
-  // ---- salvare progres ----
-  const bk = h('div', 'card');
-  bk.innerHTML = `<b>🔐 Codul de salvare</b>
-    <p class="sub mt8">Dacă schimbi telefonul sau se șterge aplicația, progresul se recuperează cu acest cod. Trimite-l din când în când cuiva de încredere (de ex. pe WhatsApp la băieți).</p>`;
-  const bexp = h('button', 'btn btn-big', '📋 Copiază codul de salvare');
-  bexp.addEventListener('click', async () => {
-    const code = exportCode();
-    if (!code) { toast('Nu s-a putut genera codul.'); return; }
-    let copied = false;
-    try { await navigator.clipboard.writeText(code); copied = true; } catch (_) {}
-    if (!copied) {
-      const ta = h('textarea', 'type-in', '');
-      ta.value = code;
-      const body = h('div');
-      body.appendChild(h('p', 'sub', 'Apasă lung pe text → Selectează tot → Copiază.'));
-      body.appendChild(ta);
-      modal('Codul tău', body);
-    } else {
-      toast('Cod copiat! Lipește-l în WhatsApp. ✅');
-    }
-  });
-  bk.appendChild(bexp);
-  const bimp = h('button', 'btn btn-big mt8', '📥 Am un cod — recuperează progresul');
-  bimp.addEventListener('click', () => {
-    const body = h('div');
-    body.appendChild(h('p', 'sub', 'Lipește codul aici:'));
-    const ta = h('textarea', 'type-in', '');
-    body.appendChild(ta);
-    const go = h('button', 'btn btn-primary btn-big mt8', 'Recuperează');
-    go.addEventListener('click', () => {
-      if (importCode(ta.value)) { applyPrefs(); toast('Progres recuperat! ✅'); back.remove(); nav('home'); }
-      else toast('Codul nu e valid. Verifică-l.');
-    });
-    body.appendChild(go);
-    const back = modal('Recuperare progres', body, { sticky: true });
-  });
-  bk.appendChild(bimp);
-  sc.appendChild(bk);
 
   // ---- sincronizare familie (se lipește AICI, în aplicație — necesar pe iPhone) ----
   const fam = h('div', 'card');
