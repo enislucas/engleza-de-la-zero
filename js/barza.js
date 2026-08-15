@@ -35,6 +35,24 @@ async function fetchMemory() {
   return memCache;
 }
 
+// ---------- ultimul podcast (ca Barza sa-l poata discuta cu ei) ----------
+let podCache = { t: 0, text: '', title: '' };
+async function fetchLatestPodcast() {
+  const cfg = tutorCfg();
+  if (!cfg || !cfg.box || !cfg.url) return podCache;
+  if (Date.now() - podCache.t < 30 * 60 * 1000) return podCache;
+  try {
+    const items = await (await fetch(`${cfg.url}/media/${cfg.box}/list`, { cache: 'no-store' })).json();
+    const txts = (items || []).filter(i => /\.txt$/i.test(i.name)).sort((a, b) => (b.stamp || 0) - (a.stamp || 0));
+    if (txts.length) {
+      let t = await (await fetch(`${cfg.url}/media/${cfg.box}/${txts[0].name}`)).text();
+      if (t.includes('\n\n')) t = t.split('\n\n').slice(1).join('\n\n'); // scoate antetul
+      podCache = { t: Date.now(), text: t.slice(0, 1600), title: decodeURIComponent(txts[0].title || 'episod') };
+    }
+  } catch (_) {}
+  return podCache;
+}
+
 // ---------- sesiuni de conversatie (calatoresc cu progresul, prin sincronizare) ----------
 // La fiecare deschidere a aplicatiei = conversatie NOUA (context scurt = ieftin). Ziua/sesiunea
 // veche se arhiveaza pentru "istoric" si se distileaza in memorie. O pauza de 30 min sau o zi
@@ -192,6 +210,7 @@ async function systemPrompt() {
   // memoria distilată pe telefon are prioritate; cea de la laptop e rezervă (continuitate)
   const localMem = (p.tutorMemory && p.tutorMemory.text) || '';
   const mem = localMem ? { text: localMem } : await fetchMemory();
+  const pod = await fetchLatestPodcast();
   const bp = p.bookProgress || {};
   const bookLine = bp.book
     ? `They are reading the PRINTED book series (separate from the app, at their own pace): currently Book ${bp.book} of 24${bp.note ? ', ' + bp.note : ''}. Reference material they have likely read on paper.`
@@ -219,7 +238,7 @@ CORRECTION: at most ONE correction per turn, by gently recasting the right form 
 WHERE EACH TOPIC IS TAUGHT (so you can send them back to re-read the RIGHT earlier book, e.g. "is vs are" lives in Book 1):
 ${bmap}
 When they ask about a grammar point, answer it simply now AND name the exact earlier book to re-read, in Romanian, e.g. ⟦ro⟧Asta e explicat pe îndelete în Cartea 1, merită s-o recitești.⟦/ro⟧ If they ask for a small table (e.g. is/are), give a tiny clean one as short aligned lines, no markdown. Gently remind, once in a while, that the words stick when they also read the book and talk with you, not only from the app drills. Never nag.
-${mem.text ? '\nWHAT YOU REMEMBER about this learner from before (use naturally, do not recite):\n' + mem.text : ''}`;
+${mem.text ? '\nWHAT YOU REMEMBER about this learner from before (use naturally, do not recite):\n' + mem.text : ''}${pod.text ? `\n\nLATEST PODCAST EPISODE (they can ask you about it — discuss it warmly, explain words or ideas from it, quiz them gently, connect it to their life). Title: "${pod.title}".\nTranscript:\n${pod.text}` : ''}`;
 }
 
 // ---------- apelul Gemini (NEfluxat: robust pe iPhone, unde fetch-ul in flux e capricios) ----------
