@@ -92,19 +92,19 @@ Actualizează notițele cu ce e NOU din conversația de azi. REGULI STRICTE:
 Structură FIXĂ, în română, rânduri simple, fără markdown:
 DESPRE: fapte personale spuse clar de ${name} (familie, muncă, oraș, preferințe).
 GRESELI: fiecare greșeală de engleză care se repetă, pe un rând, cu data între paranteze. Data ${today} pentru cele noi; păstrează datele vechi reale.
-S-A EXERSAT: pe scurt.
+S-A EXERSAT: pe scurt, poți lista pe rânduri temele exersate.
 PROMISIUNI: ce a promis profesorul.
-Maxim 18 rânduri. Dacă notițele vechi conțin ceva ce pare inventat sau nesigur, elimină-l.
+Poți ține un profil bogat (până la vreo 45 de rânduri): păstrează tot ce e util și real, nu tăia din faptele adevărate. Dacă notițele vechi conțin ceva ce pare inventat sau nesigur, elimină doar acele rânduri.
 
 NOTIȚE VECHI:
-${old.slice(0, 2000)}
+${old.slice(0, 6000)}
 
 CONVERSAȚIA DE AZI:
 ${transcript}
 
 Răspunde DOAR cu notițele actualizate.`;
     const { text, usage } = await callGemini(prompt, [{ role: 'user', content: 'Rescrie notițele acum.' }],
-      { temp: 0.3, maxTokens: 700 });
+      { temp: 0.3, maxTokens: 1500 });
     addCost(usage);
     if (text && text.trim()) {
       p.tutorMemory = { text: text.trim(), day: today, lastDistillAt: Date.now() };
@@ -200,6 +200,8 @@ async function systemPrompt() {
 
 MARKUP PROTOCOL (mandatory): wrap EVERY Romanian span in ⟦ro⟧...⟦/ro⟧. English stays unmarked. If (and only if) you correct a mistake, put ONE ⟦corr⟧...⟦/corr⟧ block at the very end. No other markup, no markdown, no asterisks, no em or en dashes.
 
+BE A GENUINELY SMART TEACHER: understand what they mean even when their English is broken or half in Romanian, infer their real intent and answer THAT directly. Reason carefully before answering any grammar or vocabulary question so you are always accurate, and never invent a rule. Give clear, correct, concretely useful answers, tie them to the learner's own life and to what they already know, and teach one small memorable thing each turn. Remember the flow of the conversation and build on it, do not repeat yourself.
+
 RESPOND TO WHAT THEY SAID (most important rule):
 - ALWAYS answer the actual content and feeling of their message. NEVER ignore it and jump to an unrelated question. Do not fire random topics like "what is your favourite colour" when they did not open that door.
 - If they express a FEELING or difficulty (frustration, "mă enervează", "nu știu", "e greu", "mă simt prost"): first acknowledge it warmly, in simple English WITH a ⟦ro⟧Romanian⟧ line so they surely feel understood, reassure them, THEN continue gently on that same subject.
@@ -228,7 +230,7 @@ async function callGemini(sys, history, opts = {}) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: sys }] },
       contents,
-      generationConfig: { temperature: opts.temp ?? 0.8, maxOutputTokens: opts.maxTokens ?? 500, thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: { temperature: opts.temp ?? 0.8, maxOutputTokens: opts.maxTokens ?? 500, thinkingConfig: { thinkingBudget: opts.think ?? 0 } },
     }),
   });
   if (!res.ok) {
@@ -591,10 +593,11 @@ export function renderBarza(deps) {
     window.scrollTo(0, document.body.scrollHeight);
     try {
       const sys = await systemPrompt();
-      const ctx = chatStore().messages.slice(-12);   // context scurt = ieftin
+      const ctx = chatStore().messages.slice(-16);   // ceva mai mult context = raspunsuri mai bune
       const prefer = routePrefer(lastVoice, text);   // voce/gramatica -> Gemini; restul -> DeepSeek
       lastVoice = false;
-      const r = await callLLM(sys, ctx, prefer);
+      // pe ruta Gemini (intrebari complexe) pornim „gandirea” = raspunsuri mai istete
+      const r = await callLLM(sys, ctx, prefer, { maxTokens: 650, think: 1024 });
       addCost(r.usage, r.deepseek);
       const raw = r.text;
       if (!raw) throw new Error('raspuns gol');
