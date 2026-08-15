@@ -347,20 +347,28 @@ function renderRich(el, raw, opts = {}) {
 }
 
 // mic popover cu traducerea unui cuvant, deasupra lui
-let _tip = null;
-function hideTip() { if (_tip) _tip.style.display = 'none'; }
+let _tip = null, _tipSpan = null, _tipTimer = 0;
+function hideTip() { if (_tip) _tip.style.display = 'none'; _tipSpan = null; }
+function positionTip() {
+  if (!_tip || !_tipSpan) return;
+  const r = _tipSpan.getBoundingClientRect();
+  _tip.style.left = Math.max(8, Math.min(r.left + r.width / 2, window.innerWidth - 8)) + 'px';
+  _tip.style.top = (r.top - 8) + 'px';
+}
 function showWordTip(span, text) {
   if (!_tip) {
     _tip = h('div', 'b-wtip');
     document.body.appendChild(_tip);
-    document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.b-w')) hideTip(); }, true);
-    window.addEventListener('scroll', hideTip, true);
+    // ascunde DOAR daca atingi in afara unui cuvant (pastreaza .b-w SI .rw din cititor)
+    document.addEventListener('click', (e) => { if (!e.target.closest || !e.target.closest('.b-w, .rw')) hideTip(); }, true);
+    window.addEventListener('scroll', positionTip, true);   // urmareste cuvantul cand se deruleaza, nu-l ascunde
   }
+  _tipSpan = span;
   _tip.textContent = text;
   _tip.style.display = 'block';
-  const r = span.getBoundingClientRect();
-  _tip.style.left = Math.max(8, Math.min(r.left + r.width / 2, window.innerWidth - 8)) + 'px';
-  _tip.style.top = (r.top - 8) + 'px';
+  positionTip();
+  clearTimeout(_tipTimer);
+  _tipTimer = setTimeout(hideTip, 3500);                    // se stinge singur dupa 3.5s
 }
 function segmentsOf(raw) {
   const out = [];
@@ -500,7 +508,16 @@ function openVideo(src) {
   vid.src = src;
   const x = h('button', 'b-video-x', '✕');
   x.addEventListener('click', () => { try { vid.pause(); } catch (_) {} ov.remove(); });
-  ov.appendChild(vid); ov.appendChild(x);
+  // buton ecran complet → permite rotirea în peisaj (landscape) pe telefon
+  const fs = h('button', 'b-video-fs', '⛶ Ecran mare');
+  fs.addEventListener('click', () => {
+    try {
+      if (vid.webkitEnterFullscreen) vid.webkitEnterFullscreen();      // iOS
+      else if (vid.requestFullscreen) vid.requestFullscreen();
+      else if (vid.webkitRequestFullscreen) vid.webkitRequestFullscreen();
+    } catch (_) {}
+  });
+  ov.appendChild(vid); ov.appendChild(x); ov.appendChild(fs);
   document.body.appendChild(ov);
 }
 
@@ -536,18 +553,28 @@ async function openReader(cfgAll, ep) {
   textWrap.innerHTML = '';
   const spans = [];
   if (words.length) {
+    // grupam cuvintele pe TURE de vorbitor (spk) → bule stanga/dreapta, ca o discuție
+    let curSpk = null, bubble = null;
     words.forEach((wd, i) => {
+      const spk = wd.spk || 0;
+      if (spk !== curSpk || !bubble) {
+        curSpk = spk;
+        bubble = h('div', 'rturn ' + (spk === 1 ? 'right' : 'left'));
+        textWrap.appendChild(bubble);
+      }
       const s = h('span', 'rw' + (wd.lang === 'ro' ? ' ro' : ''), esc(wd.w) + ' ');
       s.dataset.idx = i;
-      textWrap.appendChild(s); spans.push(s);
+      bubble.appendChild(s); spans.push(s);
     });
   } else {
+    const bubble = h('div', 'rturn left');
+    textWrap.appendChild(bubble);
     try {
       let t = ep.files.txt ? await (await fetch(src(ep.files.txt))).text() : '';
       // scoatem antetul (titlu + „Cafeaua englezească · Profesorul Barza”) — titlul e deja sus
       if (t.includes('\n\n')) t = t.split('\n\n').slice(1).join('\n\n');
-      appendWords(textWrap, t.trim() || '(transcriere indisponibilă)');
-    } catch (_) { textWrap.textContent = '(transcriere indisponibilă)'; }
+      appendWords(bubble, t.trim() || '(transcriere indisponibilă)');
+    } catch (_) { bubble.textContent = '(transcriere indisponibilă)'; }
   }
 
   // tap pe cuvant -> traducere (engleza -> romana; romana e deja romana, o aratam ca atare)
