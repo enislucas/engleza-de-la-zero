@@ -411,7 +411,7 @@ async function videoShelf(cfgAll) {
     // grupam pe EPISOD (ep1.mp4/.mp3/.txt = un singur episod), nu pe fisier
     const groups = {};
     for (const it of all) {
-      const m = String(it.name).match(/^(.*)\.(mp4|mp3|txt)$/i);
+      const m = String(it.name).match(/^(.*)\.(mp4|mp3|txt|json)$/i);
       if (!m) continue;
       const base = m[1], ext = m[2].toLowerCase();
       const g = (groups[base] = groups[base] || { title: it.title, stamp: 0, files: {} });
@@ -430,15 +430,15 @@ async function videoShelf(cfgAll) {
       card.appendChild(h('div', 'b-vid-title', esc(decodeURIComponent(ep.title || 'Episod'))));
       const row = h('div', 'b-vid-row');
       const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}`;
+      if (ep.files.mp3) {   // experienta bogata: audio + text sincron + traducere pe cuvant
+        const a = h('button', 'b-vid-btn', '🎧 Ascultă și citește');
+        a.addEventListener('click', () => openReader(cfgAll, ep));
+        row.appendChild(a);
+      }
       if (ep.files.mp4) {
-        const w = h('button', 'b-vid-btn', '▶ Vezi');
+        const w = h('button', 'b-vid-btn ghost', '📺 Video');
         w.addEventListener('click', () => openVideo(src(ep.files.mp4)));
         row.appendChild(w);
-      }
-      if (ep.files.mp3) {
-        const a = h('button', 'b-vid-btn ghost', '🎧 Ascultă');
-        a.addEventListener('click', () => openVideo(src(ep.files.mp3)));
-        row.appendChild(a);
       }
       card.appendChild(row);
       wrap.appendChild(card);
@@ -500,6 +500,85 @@ function openVideo(src) {
   x.addEventListener('click', () => { try { vid.pause(); } catch (_) {} ov.remove(); });
   ov.appendChild(vid); ov.appendChild(x);
   document.body.appendChild(ov);
+}
+
+// ---------- cititorul: audio + text sincron (karaoke) + traducere pe cuvant ----------
+async function openReader(cfgAll, ep) {
+  const src = (name) => `${cfgAll.url}/media/${cfgAll.box}/${name}`;
+  const ov = h('div', 'b-read-ov');
+  const card = h('div', 'b-read-card');
+  const head = h('div', 'b-read-head');
+  head.appendChild(h('div', 'b-read-t', esc(decodeURIComponent(ep.title || 'Episod'))));
+  const audio = document.createElement('audio');
+  audio.src = src(ep.files.mp3); audio.preload = 'auto';
+  const x = h('button', 'b-read-x', '✕');
+  x.addEventListener('click', () => { try { audio.pause(); } catch (_) {} ov.remove(); });
+  head.appendChild(x);
+  card.appendChild(head);
+
+  const textWrap = h('div', 'b-read-text');
+  textWrap.textContent = 'Se încarcă…';
+  card.appendChild(textWrap);
+
+  const bar = h('div', 'b-read-bar');
+  const playBtn = h('button', 'b-read-play', '▶');
+  const seek = h('input', 'b-read-seek'); seek.type = 'range'; seek.min = 0; seek.value = 0; seek.step = 0.1;
+  bar.appendChild(playBtn); bar.appendChild(seek);
+  card.appendChild(bar);
+  ov.appendChild(card);
+  document.body.appendChild(ov);
+
+  // cuvintele cu timp (karaoke). Fara ele: aratam textul, tot tapabil, dar fara evidentiere.
+  let words = [];
+  try { if (ep.files.json) words = ((await (await fetch(src(ep.files.json))).json()).words) || []; } catch (_) {}
+  textWrap.innerHTML = '';
+  const spans = [];
+  if (words.length) {
+    words.forEach((wd, i) => {
+      const s = h('span', 'rw' + (wd.lang === 'ro' ? ' ro' : ''), esc(wd.w) + ' ');
+      s.dataset.idx = i;
+      textWrap.appendChild(s); spans.push(s);
+    });
+  } else {
+    try {
+      const t = ep.files.txt ? await (await fetch(src(ep.files.txt))).text() : '';
+      appendWords(textWrap, t || '(transcriere indisponibilă)');
+    } catch (_) { textWrap.textContent = '(transcriere indisponibilă)'; }
+  }
+
+  // tap pe cuvant -> traducere (engleza -> romana; romana e deja romana, o aratam ca atare)
+  textWrap.addEventListener('click', async (e) => {
+    const w = e.target.closest('.rw, .b-w');
+    if (!w) return;
+    const wd = (w.dataset.idx != null) ? words[w.dataset.idx] : null;
+    if (wd && wd.lang === 'ro') { showWordTip(w, wd.w); return; }
+    showWordTip(w, '…');
+    try { showWordTip(w, (await wordRo(w.textContent)) || '(?)'); } catch (_) { showWordTip(w, '(?)'); }
+  });
+
+  // evidentierea cuvantului curent, sincron cu sunetul
+  let cursor = 0, lastOn = null;
+  audio.addEventListener('timeupdate', () => {
+    if (words.length) {
+      const ct = audio.currentTime;
+      while (cursor < words.length - 1 && ct >= words[cursor + 1].t) cursor++;
+      while (cursor > 0 && ct < words[cursor].t) cursor--;
+      const cur = (ct >= words[cursor].t) ? spans[cursor] : null;
+      if (cur !== lastOn) {
+        if (lastOn) lastOn.classList.remove('on');
+        if (cur) { cur.classList.add('on'); cur.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        lastOn = cur;
+      }
+    }
+    seek.value = audio.currentTime;
+  });
+  audio.addEventListener('loadedmetadata', () => { seek.max = audio.duration || 0; });
+  audio.addEventListener('ended', () => { playBtn.textContent = '▶'; });
+  playBtn.addEventListener('click', () => {
+    if (audio.paused) { audio.play(); playBtn.textContent = '⏸'; }
+    else { audio.pause(); playBtn.textContent = '▶'; }
+  });
+  seek.addEventListener('input', () => { audio.currentTime = Number(seek.value); });
 }
 
 // ---------- ecranul ----------
